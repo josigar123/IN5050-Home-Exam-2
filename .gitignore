@@ -10,3 +10,18 @@ c63pred
 # data files
 *.yuv
 *.c63
+
+#build
+build/
+!golden/
+!golden/*
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.a
+*.so
+
+# macOS
+.DS_Store
