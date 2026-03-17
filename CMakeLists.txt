@@ -46,4 +46,4 @@ add_library(c63
 add_executable(c63enc
                c63enc.c c63.h
 	       c63_write.c c63_write.h)
-target_link_libraries(c63enc c63 m)
+target_link_libraries(c63enc c63 m nvToolsExt)
