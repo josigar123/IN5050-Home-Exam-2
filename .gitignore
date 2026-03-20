@@ -25,3 +25,9 @@ cmake_install.cmake
 
 # macOS
 .DS_Store
+
+reports/
+
+*.md
+!README.md
+.*

@@ -1,8 +1,9 @@
 # Paths
-BUILD  := build
-GOLDEN := golden
-OUT    := out
-INPUT  ?= /mnt/sdcard/cipr
+BUILD   := build
+GOLDEN  := golden
+OUT     := out
+REPORTS := reports
+INPUT   ?= /mnt/sdcard/cipr
 
 # Tools
 PLAYER := mplayer
@@ -49,7 +50,20 @@ TRACTOR_DEC_YUV  := $(OUT)/tractor_dec_$(SRC_TAG).yuv
 FOREMAN_PRED_YUV := $(OUT)/foreman_pred_$(SRC_TAG).yuv
 TRACTOR_PRED_YUV := $(OUT)/tractor_pred_$(SRC_TAG).yuv
 
+# nsys profiling flags
+SAMPLE ?= cpu
+NSYS_FLAGS := --trace=nvtx,osrt \
+              --sample=$(SAMPLE) \
+              --backtrace=dwarf \
+              --cpuctxsw=none \
+              --stats=true \
+              --force-overwrite true
+
+# Default NSYS profile name
+D_PROFILE_NAME := c63_profile
+
 .PHONY: all help check build dirs \
+        nsys-foreman nsys-tractor \
         encode-foreman encode-tractor encode-all \
         golden-encode-foreman golden-encode-tractor golden-encode-all \
         decode-foreman decode-tractor decode-all \
@@ -81,7 +95,15 @@ build:
 	cmake -B $(BUILD) && make -C $(BUILD)
 
 dirs:
-	mkdir -p $(OUT)
+	mkdir -p $(OUT) $(REPORTS)
+
+nsys-foreman: build dirs
+	nsys profile $(NSYS_FLAGS) -o $(REPORTS)/$(D_PROFILE_NAME) \
+	  $(ENC) -w 352 -h 288 -f $(FRAMES) -o $(FOREMAN_C63_EXP) $(FOREMAN_IN)
+
+nsys-tractor: build dirs
+	nsys profile $(NSYS_FLAGS) -o $(REPORTS)/$(D_PROFILE_NAME) \
+	  $(ENC) -w 1920 -h 1080 -f $(FRAMES) -o $(TRACTOR_C63_EXP) $(TRACTOR_IN)
 
 # Experimental encode
 encode-foreman: build dirs
