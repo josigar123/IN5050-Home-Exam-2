@@ -59,25 +59,34 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   int mx = mb_x * 8;
   int my = mb_y * 8;
 
+  // Write to stack, then heap at end
+  int8_t best_mv_x = 0;
+  int8_t best_mv_y = 0;
   int best_sad = INT_MAX;
 
+  uint8_t *orig_addr = orig + my * w + mx; // Unchanging, hoisted out of loop
+#pragma unroll
   for (y = top; y < bottom; ++y)
   {
+    uint8_t *ref_addr = ref + y * w;                    // Hoist
+    __builtin_prefetch(ref + (y + 1) * w + left, 0, 0); // Hint at prefetch of next ref block, no locality, can be removed after access
+#pragma unroll
     for (x = left; x < right; ++x)
     {
-      int sad;
-      sad_block_8x8(orig + my * w + mx, ref + y * w + x, w, &sad);
+      int sad = sad_block_8x8(orig_addr, ref_addr + x, w);
 
       if (sad < best_sad)
       {
-        mb->mv_x = x - mx;
-        mb->mv_y = y - my;
+        best_mv_x = x - mx;
+        best_mv_y = y - my;
         best_sad = sad;
       }
     }
   }
 
   mb->use_mv = 1;
+  mb->mv_x = best_mv_x;
+  mb->mv_y = best_mv_y;
 }
 
 void c63_motion_estimate(struct c63_common *cm)
