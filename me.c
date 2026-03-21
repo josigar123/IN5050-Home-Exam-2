@@ -36,8 +36,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   int w = cm->padw[color_component];
   int h = cm->padh[color_component];
 
-  /* Make sure we are within bounds of reference frame. TODO: Support partial
-     frame bounds. */
+  /* Make sure we are within bounds of reference frame. */
   if (left < 0)
   {
     left = 0;
@@ -69,8 +68,6 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
       int sad;
       sad_block_8x8(orig + my * w + mx, ref + y * w + x, w, &sad);
 
-      /* printf("(%4d,%4d) - %d\n", x, y, sad); */
-
       if (sad < best_sad)
       {
         mb->mv_x = x - mx;
@@ -79,12 +76,6 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
       }
     }
   }
-
-  /* Here, there should be a threshold on SAD that checks if the motion vector
-     is cheaper than intraprediction. We always assume MV to be beneficial */
-
-  /* printf("Using motion vector (%d, %d) with SAD %d\n", mb->mv_x, mb->mv_y,
-     best_sad); */
 
   mb->use_mv = 1;
 }

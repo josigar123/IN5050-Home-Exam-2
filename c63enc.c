@@ -142,8 +142,7 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
                   cm->vpw, cm->vph, cm->curframe->recons->V,
                   cm->quanttbl[V_COMPONENT]);
   nvtxRangePop();
-  /* Function dump_image(), found in common.c, can be used here to check if the
-     prediction is correct */
+
   nvtxRangePush("Write frame");
   write_frame(cm);
   nvtxRangePop();
@@ -309,17 +308,6 @@ int main(int argc, char **argv)
   free_c63_enc(cm);
   fclose(outfile);
   fclose(infile);
-
-  // int i, j;
-  // for (i = 0; i < 2; ++i)
-  //{
-  //   printf("int freq[] = {");
-  //   for (j = 0; j < ARRAY_SIZE(frequencies[i]); ++j)
-  //   {
-  //     printf("%d, ", frequencies[i][j]);
-  //   }
-  //   printf("};\n");
-  // }
 
   return EXIT_SUCCESS;
 }
