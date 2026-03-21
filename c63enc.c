@@ -28,24 +28,33 @@ static uint32_t height;
 extern int optind;
 extern char *optarg;
 
-/* Read planar YUV frames with 4:2:0 chroma sub-sampling */
-static yuv_t *read_yuv(FILE *file, struct c63_common *cm)
+static yuv_t *alloc_input_image(struct c63_common *cm)
 {
-  size_t len = 0;
+
   yuv_t *image = malloc(sizeof(*image));
 
-  /* Read Y. The size of Y is the same as the size of the image. The indices
-     represents the color component (0 is Y, 1 is U, and 2 is V) */
   image->Y = calloc(1, cm->padw[Y_COMPONENT] * cm->padh[Y_COMPONENT]);
-  len += fread(image->Y, 1, width * height, file);
-
-  /* Read U. Given 4:2:0 chroma sub-sampling, the size is 1/4 of Y
-     because (height/2)*(width/2) = (height*width)/4. */
   image->U = calloc(1, cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT]);
-  len += fread(image->U, 1, (width * height) / 4, file);
-
-  /* Read V. Given 4:2:0 chroma sub-sampling, the size is 1/4 of Y. */
   image->V = calloc(1, cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT]);
+
+  return image;
+}
+
+static void free_input_image(yuv_t *image)
+{
+  free(image->Y);
+  free(image->U);
+  free(image->V);
+  free(image);
+}
+
+/* Read planar YUV frames with 4:2:0 chroma sub-sampling */
+static int read_yuv_into_from(yuv_t *image, FILE *file)
+{
+  size_t len = 0;
+
+  len += fread(image->Y, 1, width * height, file);
+  len += fread(image->U, 1, (width * height) / 4, file);
   len += fread(image->V, 1, (width * height) / 4, file);
 
   if (ferror(file))
@@ -56,27 +65,16 @@ static yuv_t *read_yuv(FILE *file, struct c63_common *cm)
 
   if (feof(file))
   {
-    free(image->Y);
-    free(image->U);
-    free(image->V);
-    free(image);
-
-    return NULL;
+    return 0;
   }
   else if (len != width * height * 1.5)
   {
     fprintf(stderr, "Reached end of file, but incorrect bytes read.\n");
     fprintf(stderr, "Wrong input? (height: %d width: %d)\n", height, width);
-
-    free(image->Y);
-    free(image->U);
-    free(image->V);
-    free(image);
-
-    return NULL;
+    return 0;
   }
 
-  return image;
+  return 1;
 }
 
 static void c63_encode_image(struct c63_common *cm, yuv_t *image)
@@ -142,12 +140,6 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
                   cm->vpw, cm->vph, cm->curframe->recons->V,
                   cm->quanttbl[V_COMPONENT]);
   nvtxRangePop();
-
-  nvtxRangePush("Write frame");
-  write_frame(cm);
-  nvtxRangePop();
-  ++cm->framenum;
-  ++cm->frames_since_keyframe;
 }
 
 struct c63_common *init_c63_enc(int width, int height)
@@ -214,7 +206,6 @@ static void print_help()
 int main(int argc, char **argv)
 {
   int c;
-  yuv_t *image;
 
   if (argc == 1)
   {
@@ -278,11 +269,11 @@ int main(int argc, char **argv)
   /* Encode input frames */
   int numframes = 0;
 
+  // Allocate image once, reuse
+  yuv_t *image = alloc_input_image(cm);
   while (1)
   {
-    image = read_yuv(infile, cm);
-
-    if (!image)
+    if (!read_yuv_into_from(image, infile))
     {
       break;
     }
@@ -290,10 +281,11 @@ int main(int argc, char **argv)
     printf("Encoding frame %d, ", numframes);
     c63_encode_image(cm, image);
 
-    free(image->Y);
-    free(image->U);
-    free(image->V);
-    free(image);
+    nvtxRangePush("Write frame");
+    write_frame(cm);
+    nvtxRangePop();
+    ++cm->framenum;
+    ++cm->frames_since_keyframe;
 
     printf("Done!\n");
 
@@ -305,6 +297,7 @@ int main(int argc, char **argv)
     }
   }
 
+  free_input_image(image);
   free_c63_enc(cm);
   fclose(outfile);
   fclose(infile);
