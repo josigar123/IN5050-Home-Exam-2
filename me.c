@@ -137,19 +137,19 @@ static void mc_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
   int left = mb_x * 8;
   int top = mb_y * 8;
-  int right = left + 8;
-  int bottom = top + 8;
 
   int w = cm->padw[color_component];
 
+  // Initialize ref and pred pointer for first row
+  uint8_t *ref_src = ref + (top + mb->mv_y) * w + (left + mb->mv_x);
+  uint8_t *pred_dst = predicted + top * w + left;
+
+#pragma unroll
   /* Copy block from ref mandated by MV */
-  int x, y;
-  for (y = top; y < bottom; ++y)
+  for (int row = 0; row < 8; ++row)
   {
-    for (x = left; x < right; ++x)
-    {
-      predicted[y * w + x] = ref[(y + mb->mv_y) * w + (x + mb->mv_x)];
-    }
+    // Load 8 pixels from ref and store to pred for row
+    vst1_u8(pred_dst + row * w, vld1_u8(ref_src + row * w));
   }
 }
 
