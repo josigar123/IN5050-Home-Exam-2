@@ -96,6 +96,7 @@ void c63_motion_estimate(struct c63_common *cm)
 
   /* Luma */
   nvtxRangePush("ME Luma");
+#pragma omp parallel for schedule(dynamic) private(mb_x)
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
     for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
@@ -108,6 +109,7 @@ void c63_motion_estimate(struct c63_common *cm)
 
   /* Chroma */
   nvtxRangePush("ME Chroma");
+#pragma omp parallel for schedule(dynamic) private(mb_x)
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
     for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
@@ -142,7 +144,6 @@ static void mc_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
   /* Copy block from ref mandated by MV */
   int x, y;
-
   for (y = top; y < bottom; ++y)
   {
     for (x = left; x < right; ++x)

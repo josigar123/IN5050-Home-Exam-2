@@ -15,9 +15,9 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_EXTENSIONS ON) # definitely use GNU extensions (actually default)
 
 # Overwrite default -O3 flag for Release mode
-set(CMAKE_C_FLAGS_RELEASE "-O1 -fno-tree-vectorize")
+set(CMAKE_C_FLAGS_RELEASE "-O1 -fno-tree-vectorize -ffast-math")
 # Make sure Debug mode flags are similar to Release mode flags
-set(CMAKE_C_FLAGS_DEBUG "-g -O1 -fno-tree-vectorize")
+set(CMAKE_C_FLAGS_DEBUG "-g -O1 -fno-tree-vectorize -ffast-math")
 
 # Debug compiles with -g or equivalent for debugging.
 # Change to Release for good speed.
@@ -41,6 +41,8 @@ find_path(NVTX_INCLUDE_DIR nvtx3/nvToolsExt.h
   REQUIRED)
 
 
+find_package(OpenMP REQUIRED)
+
 add_library(c63
             STATIC dsp.c dsp.h
 	           tables.c tables.h
@@ -53,4 +55,5 @@ add_executable(c63enc
                c63enc.c c63.h
 	       c63_write.c c63_write.h)
 target_include_directories(c63enc PRIVATE ${NVTX_INCLUDE_DIR})
-target_link_libraries(c63enc c63 m dl)
+target_link_libraries(c63 OpenMP::OpenMP_C)
+target_link_libraries(c63enc c63 OpenMP::OpenMP_C m dl)
