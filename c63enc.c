@@ -80,9 +80,10 @@ static int read_yuv_into_from(yuv_t *image, FILE *file)
 static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 {
   /* Advance to next frame */
-  destroy_frame(cm->refframe);
+  struct frame *old_refframe = cm->refframe;
   cm->refframe = cm->curframe;
-  cm->curframe = create_frame(cm, image);
+  cm->curframe = old_refframe;
+  cm->curframe->orig = image; // curframe must point to the newly read image
 
   /* Check if keyframe */
   if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
@@ -101,6 +102,14 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   {
     c63_motion_estimate(cm);
     c63_motion_compensate(cm);
+  }
+  else
+  {
+    // Must reset predicted frame on keyframes, as frames are ping-ponged
+    yuv_t *pred = cm->curframe->predicted;
+    memset(pred->Y, 0, cm->ypw * cm->yph);
+    memset(pred->U, 0, cm->upw * cm->uph);
+    memset(pred->V, 0, cm->vpw * cm->vph);
   }
 
   /* DCT and Quantization */
@@ -184,12 +193,6 @@ struct c63_common *init_c63_enc(int width, int height)
   return cm;
 }
 
-void free_c63_enc(struct c63_common *cm)
-{
-  destroy_frame(cm->curframe);
-  free(cm);
-}
-
 static void print_help()
 {
   printf("Usage: ./c63enc [options] input_file\n");
@@ -271,6 +274,14 @@ int main(int argc, char **argv)
 
   // Allocate image once, reuse
   yuv_t *image = alloc_input_image(cm);
+
+  struct frame *frame_a = create_frame(cm, image);
+  struct frame *frame_b = create_frame(cm, image);
+  cm->refframe = frame_a;
+  cm->curframe = frame_b;
+  cm->framenum = 0;
+  cm->frames_since_keyframe = 0;
+
   while (1)
   {
     if (!read_yuv_into_from(image, infile))
@@ -297,8 +308,10 @@ int main(int argc, char **argv)
     }
   }
 
+  destroy_frame(frame_a);
+  destroy_frame(frame_b);
   free_input_image(image);
-  free_c63_enc(cm);
+  free(cm);
   fclose(outfile);
   fclose(infile);
 
