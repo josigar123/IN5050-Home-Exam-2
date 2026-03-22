@@ -5,17 +5,33 @@
 #include "dsp.h"
 #include "tables.h"
 
+// 16ns for old transpose, about 7ns for new
+
+static inline void transpose_4x4(float *in_data, float *out_data, int in_stride, int out_stride)
+{
+  // Extract rows for the 4x4 matrix, MB is split into four 4x4 regions, stride is 8 for in and out
+  float32x4_t row0 = vld1q_f32(in_data + 0 * in_stride);
+  float32x4_t row1 = vld1q_f32(in_data + 1 * in_stride);
+  float32x4_t row2 = vld1q_f32(in_data + 2 * in_stride);
+  float32x4_t row3 = vld1q_f32(in_data + 3 * in_stride);
+
+  // Treats rows as two 2x2 matrices and transposes them, trans*.val[*] hold partial columns
+  float32x4x2_t trans01 = vtrnq_f32(row0, row1);
+  float32x4x2_t trans23 = vtrnq_f32(row2, row3);
+
+  // Combines columns and stores in out data so we have a transposed 4x4 block
+  vst1q_f32(out_data + 0 * out_stride, vcombine_f32(vget_low_f32(trans01.val[0]), vget_low_f32(trans23.val[0])));
+  vst1q_f32(out_data + 1 * out_stride, vcombine_f32(vget_low_f32(trans01.val[1]), vget_low_f32(trans23.val[1])));
+  vst1q_f32(out_data + 2 * out_stride, vcombine_f32(vget_high_f32(trans01.val[0]), vget_high_f32(trans23.val[0])));
+  vst1q_f32(out_data + 3 * out_stride, vcombine_f32(vget_high_f32(trans01.val[1]), vget_high_f32(trans23.val[1])));
+}
+
 static void transpose_block(float *in_data, float *out_data)
 {
-  int i, j;
-
-  for (i = 0; i < 8; ++i)
-  {
-    for (j = 0; j < 8; ++j)
-    {
-      out_data[i * 8 + j] = in_data[j * 8 + i];
-    }
-  }
+  transpose_4x4(in_data, out_data, 8, 8);
+  transpose_4x4(in_data + 4, out_data + 32, 8, 8);
+  transpose_4x4(in_data + 32, out_data + 4, 8, 8);
+  transpose_4x4(in_data + 36, out_data + 36, 8, 8);
 }
 
 // Calculates coefficients for 1 row
@@ -23,6 +39,7 @@ static void dct_1d(float *in_data, float *out_data)
 {
   float32x4_t acc0 = vdupq_n_f32(0.0f);
   float32x4_t acc1 = vdupq_n_f32(0.0f);
+#pragma unroll
   for (int i = 0; i < 8; ++i)
   {
     // Broadcast input value to calculate coefficients for
@@ -123,6 +140,7 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
     dct_1d(mb2 + v * 8, mb + v * 8);
   }
   transpose_block(mb, mb2);
+
   for (v = 0; v < 8; ++v)
   {
     dct_1d(mb2 + v * 8, mb + v * 8);
