@@ -18,21 +18,23 @@ static void transpose_block(float *in_data, float *out_data)
   }
 }
 
+// Calculates coefficients for 1 row
 static void dct_1d(float *in_data, float *out_data)
 {
-  int i, j;
-
-  for (i = 0; i < 8; ++i)
+  float32x4_t acc0 = vdupq_n_f32(0.0f);
+  float32x4_t acc1 = vdupq_n_f32(0.0f);
+  for (int i = 0; i < 8; ++i)
   {
-    float dct = 0;
+    // Broadcast input value to calculate coefficients for
+    float32x4_t in_i = vdupq_n_f32(in_data[i]);
 
-    for (j = 0; j < 8; ++j)
-    {
-      dct += in_data[j] * dctlookup[j][i];
-    }
-
-    out_data[i] = dct;
+    // Do fused multiply-accumulate for DCT coeff
+    acc0 = vfmaq_f32(acc0, in_i, vld1q_f32(&dctlookup[i][0]));
+    acc1 = vfmaq_f32(acc1, in_i, vld1q_f32(&dctlookup[i][4]));
   }
+
+  vst1q_f32(&out_data[0], acc0);
+  vst1q_f32(&out_data[4], acc1);
 }
 
 static void idct_1d(float *in_data, float *out_data)
@@ -169,20 +171,3 @@ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
     out_data[i] = mb[i];
   }
 }
-
-// void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result)
-// {
-//   uint16x8_t acc = vabdl_u8(vld1_u8(block1 + 0 * stride), // SAD first row
-//                             vld1_u8(block2 + 0 * stride));
-
-//   // Load rows from blocks and accumulate SAD
-//   acc = vabal_u8(acc, vld1_u8(block1 + 1 * stride), vld1_u8(block2 + 1 * stride));
-//   acc = vabal_u8(acc, vld1_u8(block1 + 2 * stride), vld1_u8(block2 + 2 * stride));
-//   acc = vabal_u8(acc, vld1_u8(block1 + 3 * stride), vld1_u8(block2 + 3 * stride));
-//   acc = vabal_u8(acc, vld1_u8(block1 + 4 * stride), vld1_u8(block2 + 4 * stride));
-//   acc = vabal_u8(acc, vld1_u8(block1 + 5 * stride), vld1_u8(block2 + 5 * stride));
-//   acc = vabal_u8(acc, vld1_u8(block1 + 6 * stride), vld1_u8(block2 + 6 * stride));
-//   acc = vabal_u8(acc, vld1_u8(block1 + 7 * stride), vld1_u8(block2 + 7 * stride));
-
-//   *result = vaddvq_u16(acc);
-// }

@@ -70,6 +70,7 @@ D_PROFILE_NAME := c63_profile
         pred-foreman pred-tractor pred-all \
         run-foreman run-tractor run-all \
         play-foreman-dec play-tractor-dec play-foreman-pred play-tractor-pred \
+		calculate-psnr-foreman \
         clean clean-all
 
 all: run-foreman
@@ -144,6 +145,21 @@ pred-all: pred-foreman pred-tractor
 run-foreman: decode-foreman pred-foreman
 run-tractor: decode-tractor pred-tractor
 run-all: decode-all pred-all
+
+# Quality check
+PSNR_FRAMES ?= 300
+FOREMAN_DEC_EXP    := $(OUT)/foreman_dec_exp.yuv
+FOREMAN_DEC_GOLDEN := $(OUT)/foreman_dec_golden.yuv
+
+calculate-psnr-foreman: dirs
+	$(ENC) -w 352 -h 288 -f $(PSNR_FRAMES) -o $(FOREMAN_C63_EXP) $(FOREMAN_IN)
+	-$(DEC) $(FOREMAN_C63_EXP) $(FOREMAN_DEC_EXP)
+	$(ENC_GOLDEN) -w 352 -h 288 -f $(PSNR_FRAMES) -o $(FOREMAN_C63_GOLDEN) $(FOREMAN_IN)
+	-$(DEC) $(FOREMAN_C63_GOLDEN) $(FOREMAN_DEC_GOLDEN)
+	ffmpeg -s 352x288 -pix_fmt yuv420p -i $(FOREMAN_DEC_EXP) \
+	       -s 352x288 -pix_fmt yuv420p -i $(FOREMAN_DEC_GOLDEN) \
+	       -lavfi psnr -f null -
+
 
 # Playback
 play-foreman-dec:
