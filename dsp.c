@@ -2,10 +2,33 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include <time.h>
+
 #include "dsp.h"
 #include "tables.h"
 
-// 16ns for old transpose, about 7ns for new
+// Scale block orig takes 27-29 ns, new version takes 12ns
+
+// struct timespec t0, t1;
+//   clock_gettime(CLOCK_MONOTONIC, &t0);
+//   for (int i = 0; i < 1000000; i++)
+//     scale_block(mb2, mb);
+//   clock_gettime(CLOCK_MONOTONIC, &t1);
+
+//   double per_call_ns = ((t1.tv_sec - t0.tv_sec) * 1e9 + (t1.tv_nsec - t0.tv_nsec)) / 1000000.0;
+//   printf("%.1f ns per call\n", per_call_ns);
+
+// A look-up table for scale-block to avoid branching in inner-loop
+static const float scale_lut[8][8] = {
+    {0.5, ISQRT2, ISQRT2, ISQRT2, ISQRT2, ISQRT2, ISQRT2, ISQRT2},
+    {ISQRT2, 1, 1, 1, 1, 1, 1, 1},
+    {ISQRT2, 1, 1, 1, 1, 1, 1, 1},
+    {ISQRT2, 1, 1, 1, 1, 1, 1, 1},
+    {ISQRT2, 1, 1, 1, 1, 1, 1, 1},
+    {ISQRT2, 1, 1, 1, 1, 1, 1, 1},
+    {ISQRT2, 1, 1, 1, 1, 1, 1, 1},
+    {ISQRT2, 1, 1, 1, 1, 1, 1, 1},
+};
 
 static inline void transpose_4x4(float *in_data, float *out_data, int in_stride, int out_stride)
 {
@@ -73,18 +96,20 @@ static void idct_1d(float *in_data, float *out_data)
 
 static void scale_block(float *in_data, float *out_data)
 {
-  int u, v;
-
-  for (v = 0; v < 8; ++v)
+#pragma unroll
+  for (int v = 0; v < 8; ++v)
   {
-    for (u = 0; u < 8; ++u)
-    {
-      float a1 = !u ? ISQRT2 : 1.0f;
-      float a2 = !v ? ISQRT2 : 1.0f;
+    // Load the appropriate scales into 4 lanes (1 row total)
+    float32x4_t scale0 = vld1q_f32(&scale_lut[v][0]);
+    float32x4_t scale1 = vld1q_f32(&scale_lut[v][4]);
 
-      /* Scale according to normalizing function */
-      out_data[v * 8 + u] = in_data[v * 8 + u] * a1 * a2;
-    }
+    // Load the input data for the row (first 4 values and next 4 values)
+    float32x4_t in_data0 = vld1q_f32(&in_data[v * 8]);
+    float32x4_t in_data1 = vld1q_f32(&in_data[v * 8 + 4]);
+
+    // Write scaled values to out-data two calls, half-row each
+    vst1q_f32(&out_data[v * 8], vmulq_f32(in_data0, scale0));
+    vst1q_f32(&out_data[v * 8 + 4], vmulq_f32(in_data1, scale1));
   }
 }
 
@@ -148,6 +173,7 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
   transpose_block(mb, mb2);
 
   scale_block(mb2, mb);
+
   quantize_block(mb, mb2, quant_tbl);
 
   for (i = 0; i < 64; ++i)
