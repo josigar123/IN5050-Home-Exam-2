@@ -7,8 +7,6 @@
 #include "dsp.h"
 #include "tables.h"
 
-// Scale block orig takes 27-29 ns, new version takes 12ns
-
 // struct timespec t0, t1;
 //   clock_gettime(CLOCK_MONOTONIC, &t0);
 //   for (int i = 0; i < 1000000; i++)
@@ -154,18 +152,26 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
 
   int i, v;
 
-  for (i = 0; i < 64; ++i)
+#pragma unroll
+  for (i = 0; i < 64; i += 8)
   {
-    mb2[i] = in_data[i];
+    // Read 8 signed 16-bit integers from in_data
+    int16x8_t in_i = vld1q_s16(in_data + i);
+
+    // Reads 4 low 16-bit integers (64-bit total), then expands to qword (4 32-bit ints) then converts to 4 f32 before storing at mb2 + offset
+    vst1q_f32(mb2 + i, vcvtq_f32_s32(vmovl_s16(vget_low_s16(in_i))));
+    vst1q_f32(mb2 + i + 4, vcvtq_f32_s32(vmovl_s16(vget_high_s16(in_i))));
   }
 
-  /* Two 1D DCT operations with transpose */
+/* Two 1D DCT operations with transpose */
+#pragma unroll
   for (v = 0; v < 8; ++v)
   {
     dct_1d(mb2 + v * 8, mb + v * 8);
   }
   transpose_block(mb, mb2);
 
+#pragma unroll
   for (v = 0; v < 8; ++v)
   {
     dct_1d(mb2 + v * 8, mb + v * 8);
@@ -176,9 +182,15 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
 
   quantize_block(mb, mb2, quant_tbl);
 
-  for (i = 0; i < 64; ++i)
+#pragma unroll
+  for (i = 0; i < 64; i += 8)
   {
-    out_data[i] = mb2[i];
+    // Convert to signed int32 from mb2 + offset (4 i32 values)
+    int32x4_t mb2_lo = vcvtq_s32_f32(vld1q_f32(mb2 + i));
+    int32x4_t mb2_hi = vcvtq_s32_f32(vld1q_f32(mb2 + i + 4));
+
+    // Combine to 8 i16 values with vmovn_s32 (narrowing to 16bit) and write to out_data + offset
+    vst1q_s16(out_data + i, vcombine_s16(vmovn_s32(mb2_lo), vmovn_s32(mb2_hi)));
   }
 }
 
