@@ -392,4 +392,4 @@ float dctlookup[8][8] =
         },
 };
 
-uint8_t zigzag_index[64];
+uint8_t zigzag_index[64]; // Declaration

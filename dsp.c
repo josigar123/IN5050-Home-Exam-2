@@ -7,8 +7,6 @@
 #include "dsp.h"
 #include "tables.h"
 
-// Old quantize 250ns, optimized: 60ns
-
 // struct timespec t0, t1;
 //   clock_gettime(CLOCK_MONOTONIC, &t0);
 //   for (int i = 0; i < 1000000; i++)

@@ -112,25 +112,6 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
     memset(pred->V, 0, cm->vpw * cm->vph);
   }
 
-  /* DCT and Quantization */
-  // nvtxRangePush("DCT+Q Y");
-  // dct_quantize(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
-  //              cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
-  //              cm->quanttbl[Y_COMPONENT]);
-  // nvtxRangePop();
-
-  // nvtxRangePush("DCT+Q U");
-  // dct_quantize(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
-  //              cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
-  //              cm->quanttbl[U_COMPONENT]);
-  // nvtxRangePop();
-
-  // nvtxRangePush("DCT+Q V");
-  // dct_quantize(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
-  //              cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
-  //              cm->quanttbl[V_COMPONENT]);
-  // nvtxRangePop();
-
   nvtxRangePush("DCT+Q Y");
   dct_quantize(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
                cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
@@ -207,7 +188,7 @@ struct c63_common *init_c63_enc(int width, int height)
     cm->quanttbl[U_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
     cm->quanttbl[V_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
 
-    // Precompute zig-zag indeces and write to table
+    // Precompute zig-zag indeces and write to table (defined in tables.h, declared in tables.c)
     zigzag_index[i] = zigzag_V[i] * 8 + zigzag_U[i];
 
     // Init scale quant so we only do mul in hot-loop for quantization

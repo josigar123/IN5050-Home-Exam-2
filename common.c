@@ -59,40 +59,44 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
   }
 }
 
-void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h,
+void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
                       int16_t *out_data, float *quant_scale)
 {
-  int x;
-
-  int16_t block[8 * 8];
+  // Process 2 MBs at a time
+  int16_t block_a[64] __attribute__((aligned(16)));
+  int16_t block_b[64] __attribute__((aligned(16)));
 
   /* Perform the DCT and quantization */
-  for (x = 0; x < w; x += 8)
+  for (int x = 0; x < w; x += 16)
   {
-    int i, j;
-    for (i = 0; i < 8; ++i)
+    for (int i = 0; i < 8; ++i)
     {
-      for (j = 0; j < 8; ++j)
-      {
-        block[i * 8 + j] = ((int16_t)in_data[i * w + j + x] - prediction[i * w + j + x]);
-      }
+      uint8x16_t in_row = vld1q_u8(in_data + i * w + x);      // Reads 2 rows from two different MBs
+      uint8x16_t pred_row = vld1q_u8(prediction + i * w + x); // Reads 2 rows from two diff pred MBs
+
+      // Process first block using the low 8 lanes (vget_low_u8), then widen to 16x8 (vmovl_u8), then reinterpres as signed  before dowing qword sub vsubq_s16
+      vst1q_s16(block_a + i * 8, vsubq_s16(
+                                     vreinterpretq_s16_u16(vmovl_u8(vget_low_u8(in_row))),
+                                     vreinterpretq_s16_u16(vmovl_u8(vget_low_u8(pred_row)))));
+
+      // Process second block using the high 8 lanes (vget_high_u8), then widen to 16x8 (vmovl_u8), then reinterpres as signed  before dowing qword sub vsubq_s16
+      vst1q_s16(block_b + i * 8, vsubq_s16(
+                                     vreinterpretq_s16_u16(vmovl_u8(vget_high_u8(in_row))),
+                                     vreinterpretq_s16_u16(vmovl_u8(vget_high_u8(pred_row)))));
     }
 
-    /* Store MBs linear in memory, i.e. the 64 coefficients are stored
-       continous. This allows us to ignore stride in DCT/iDCT and other
-       functions. */
-    dct_quant_block_8x8(block, out_data + (x * 8), quant_scale);
+    // Calc for first block, then second block
+    dct_quant_block_8x8(block_a, out_data + (x * 8), quant_scale);
+    dct_quant_block_8x8(block_b, out_data + ((x + 8) * 8), quant_scale);
   }
 }
 
 void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
                   uint32_t height, int16_t *out_data, float *quant_scale)
 {
-  int y;
-
-  for (y = 0; y < height; y += 8)
+  for (int y = 0; y < height; y += 8)
   {
-    dct_quantize_row(in_data + y * width, prediction + y * width, width, height,
+    dct_quantize_row(in_data + y * width, prediction + y * width, width,
                      out_data + y * width, quant_scale);
   }
 }
