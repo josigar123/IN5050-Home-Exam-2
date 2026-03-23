@@ -113,22 +113,40 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   }
 
   /* DCT and Quantization */
+  // nvtxRangePush("DCT+Q Y");
+  // dct_quantize(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
+  //              cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
+  //              cm->quanttbl[Y_COMPONENT]);
+  // nvtxRangePop();
+
+  // nvtxRangePush("DCT+Q U");
+  // dct_quantize(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
+  //              cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
+  //              cm->quanttbl[U_COMPONENT]);
+  // nvtxRangePop();
+
+  // nvtxRangePush("DCT+Q V");
+  // dct_quantize(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
+  //              cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
+  //              cm->quanttbl[V_COMPONENT]);
+  // nvtxRangePop();
+
   nvtxRangePush("DCT+Q Y");
   dct_quantize(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
                cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
-               cm->quanttbl[Y_COMPONENT]);
+               cm->quant_scale[Y_COMPONENT]);
   nvtxRangePop();
 
   nvtxRangePush("DCT+Q U");
   dct_quantize(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
                cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
-               cm->quanttbl[U_COMPONENT]);
+               cm->quant_scale[U_COMPONENT]);
   nvtxRangePop();
 
   nvtxRangePush("DCT+Q V");
   dct_quantize(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
                cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
-               cm->quanttbl[V_COMPONENT]);
+               cm->quant_scale[V_COMPONENT]);
   nvtxRangePop();
 
   /* Reconstruct frame for inter-prediction */
@@ -188,6 +206,14 @@ struct c63_common *init_c63_enc(int width, int height)
     cm->quanttbl[Y_COMPONENT][i] = yquanttbl_def[i] / (cm->qp / 10.0);
     cm->quanttbl[U_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
     cm->quanttbl[V_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
+
+    // Precompute zig-zag indeces and write to table
+    zigzag_index[i] = zigzag_V[i] * 8 + zigzag_U[i];
+
+    // Init scale quant so we only do mul in hot-loop for quantization
+    cm->quant_scale[Y_COMPONENT][i] = 0.25f / cm->quanttbl[Y_COMPONENT][i];
+    cm->quant_scale[U_COMPONENT][i] = 0.25f / cm->quanttbl[U_COMPONENT][i];
+    cm->quant_scale[V_COMPONENT][i] = 0.25f / cm->quanttbl[V_COMPONENT][i];
   }
 
   return cm;

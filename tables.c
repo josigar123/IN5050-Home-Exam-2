@@ -391,3 +391,5 @@ float dctlookup[8][8] =
             -0.195090f,
         },
 };
+
+uint8_t zigzag_index[64];

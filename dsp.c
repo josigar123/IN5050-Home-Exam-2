@@ -7,6 +7,8 @@
 #include "dsp.h"
 #include "tables.h"
 
+// Old quantize 250ns, optimized: 60ns
+
 // struct timespec t0, t1;
 //   clock_gettime(CLOCK_MONOTONIC, &t0);
 //   for (int i = 0; i < 1000000; i++)
@@ -111,19 +113,21 @@ static void scale_block(float *in_data, float *out_data)
   }
 }
 
-static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
+static void quantize_block(float *in_data, float *out_data, float *quant_scale)
 {
-  int zigzag;
-
-  for (zigzag = 0; zigzag < 64; ++zigzag)
+  float gathered_coeffs[64] __attribute((aligned(16))); // 16 byte aligned array
+#pragma unroll
+  // Gather scattered coefficients with zigzag_index LUT
+  for (int z = 0; z < 64; ++z)
   {
-    uint8_t u = zigzag_U[zigzag];
-    uint8_t v = zigzag_V[zigzag];
+    gathered_coeffs[z] = in_data[zigzag_index[z]];
+  }
 
-    float dct = in_data[v * 8 + u];
-
-    /* Zig-zag and quantize */
-    out_data[zigzag] = (float)round((dct / 4.0) / quant_tbl[zigzag]);
+#pragma unroll
+  for (int zigzag = 0; zigzag < 64; zigzag += 4)
+  {
+    // Quantize 4 coefficients: First load 4 coeffs and 4 quant scales, then multiply, then round, then store to out_data
+    vst1q_f32(&out_data[zigzag], vrndiq_f32(vmulq_f32(vld1q_f32(gathered_coeffs + zigzag), vld1q_f32(&quant_scale[zigzag]))));
   }
 }
 
@@ -145,7 +149,7 @@ static void dequantize_block(float *in_data, float *out_data,
 }
 
 void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
-                         uint8_t *quant_tbl)
+                         float *quant_scale)
 {
   float mb[8 * 8] __attribute((aligned(16)));
   float mb2[8 * 8] __attribute((aligned(16)));
@@ -180,7 +184,7 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
 
   scale_block(mb2, mb);
 
-  quantize_block(mb, mb2, quant_tbl);
+  quantize_block(mb, mb2, quant_scale);
 
 #pragma unroll
   for (i = 0; i < 64; i += 8)

@@ -41,7 +41,7 @@
 #define HUFF_AC_ZERO 16
 #define HUFF_AC_SIZE 11
 
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 struct yuv
@@ -76,11 +76,11 @@ struct macroblock
 
 struct frame
 {
-  yuv_t *orig;        // Original input image
-  yuv_t *recons;      // Reconstructed image
-  yuv_t *predicted;   // Predicted frame from intra-prediction
+  yuv_t *orig;      // Original input image
+  yuv_t *recons;    // Reconstructed image
+  yuv_t *predicted; // Predicted frame from intra-prediction
 
-  dct_t *residuals;   // Difference between original image and predicted frame
+  dct_t *residuals; // Difference between original image and predicted frame
 
   struct macroblock *mbs[COLOR_COMPONENTS];
   int keyframe;
@@ -95,11 +95,12 @@ struct c63_common
 
   int mb_cols, mb_rows;
 
-  uint8_t qp;                         // Quality parameter
+  uint8_t qp; // Quality parameter
 
   int me_search_range;
 
   uint8_t quanttbl[COLOR_COMPONENTS][64];
+  float quant_scale[COLOR_COMPONENTS][64]; // Scaled dct 0.25*quant_values, drop div in hot-loop
 
   struct frame *refframe;
   struct frame *curframe;
@@ -112,4 +113,4 @@ struct c63_common
   struct entropy_ctx e_ctx;
 };
 
-#endif  /* C63_C63_H_ */
+#endif /* C63_C63_H_ */
