@@ -66,9 +66,11 @@ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
   int16_t block_a[64] __attribute__((aligned(16)));
   int16_t block_b[64] __attribute__((aligned(16)));
 
-  /* Perform the DCT and quantization */
+/* Perform the DCT and quantization */
+#pragma unroll
   for (int x = 0; x < w; x += 16)
   {
+#pragma unroll
     for (int i = 0; i < 8; ++i)
     {
       uint8x16_t in_row = vld1q_u8(in_data + i * w + x);      // Reads 2 rows from two different MBs
@@ -94,6 +96,7 @@ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
 void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
                   uint32_t height, int16_t *out_data, float *quant_scale)
 {
+#pragma unroll
   for (int y = 0; y < height; y += 8)
   {
     dct_quantize_row(in_data + y * width, prediction + y * width, width,
