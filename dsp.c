@@ -110,21 +110,18 @@ static void transpose_block_f16(float16_t *in_data, float16_t *out_data)
 }
 
 // Calculates coefficients for 1 row
-static void dct_1d(float16_t *in_data, float16_t *out_data)
+static inline void dct_1d(float16_t *in_data, float16_t *out_data)
 {
   // Accumulator holding what is to be 8 coefficients (1 row)
-  float16x8_t acc = vdupq_n_f16((__fp16)0.0f);
-#pragma unroll
-  for (int i = 0; i < 8; ++i)
+  float16x8_t acc0 = vdupq_n_f16((__fp16)0.0f), acc1 = vdupq_n_f16((__fp16)0.0f);
+  for (int i = 0; i < 8; i += 2)
   {
-    // Broadcast input value to calculate coefficients for
-    float16x8_t in_i = vdupq_n_f16(in_data[i]);
-
     // Do fused multiply-accumulate for DCT coeff
-    acc = vfmaq_f16(acc, in_i, vld1q_f16(&dctlookup[i][0]));
+    acc0 = vfmaq_f16(acc0, vdupq_n_f16(in_data[i]), vld1q_f16(&dctlookup[i][0]));
+    acc1 = vfmaq_f16(acc1, vdupq_n_f16(in_data[i + 1]), vld1q_f16(&dctlookup[i + 1][0]));
   }
 
-  vst1q_f16(out_data, acc);
+  vst1q_f16(out_data, vaddq_f16(acc0, acc1));
 }
 
 static void idct_1d(float *in_data, float *out_data)

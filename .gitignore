@@ -31,3 +31,5 @@ reports/
 *.md
 !README.md
 .*
+
+*.nsys-rep
