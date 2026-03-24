@@ -60,7 +60,7 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
 }
 
 void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
-                      int16_t *out_data, float *quant_scale)
+                      int16_t *out_data, float16_t *quant_scale)
 {
   // Process 2 MBs at a time
   int16_t block_a[64] __attribute__((aligned(16)));
@@ -94,7 +94,7 @@ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
 }
 
 void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
-                  uint32_t height, int16_t *out_data, float *quant_scale)
+                  uint32_t height, int16_t *out_data, float16_t *quant_scale)
 {
 #pragma unroll
   for (int y = 0; y < height; y += 8)

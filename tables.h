@@ -1,6 +1,7 @@
 #ifndef C63_TABLES_H_
 #define C63_TABLES_H_
 
+#include <arm_neon.h>
 #include <inttypes.h>
 
 extern uint8_t yquanttbl_def[64] __attribute__((aligned(16)));
@@ -16,7 +17,7 @@ extern uint8_t ACVLC_data[2][162];
 extern uint8_t zigzag_U[64];
 extern uint8_t zigzag_V[64];
 extern uint8_t zigzag_index[64]; // Holds precomputed zig-zag indeces for quant
-extern float dctlookup[8][8];
+extern float16_t dctlookup[8][8];
 extern uint16_t MVVLC[8];
 extern uint8_t MVVLC_Size[8];
 

@@ -30,7 +30,7 @@ set(CMAKE_BUILD_TYPE Debug)
 #
 if(CMAKE_C_COMPILER_ID STREQUAL GNU)
   if(EXISTS "/etc/nv_tegra_release")
-    add_compile_options(-march=armv8.2-a)#+fp16) uncomment for half-prec support
+    add_compile_options(-march=armv8.2-a+fp16)
   endif()
 else()
   message(FATAL "Not compiling with an gcc")

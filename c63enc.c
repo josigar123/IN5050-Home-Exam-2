@@ -192,11 +192,10 @@ struct c63_common *init_c63_enc(int width, int height)
     zigzag_index[i] = zigzag_V[i] * 8 + zigzag_U[i];
 
     // Init scale quant so we only do mul in hot-loop for quantization
-    cm->quant_scale[Y_COMPONENT][i] = 0.25f / cm->quanttbl[Y_COMPONENT][i];
-    cm->quant_scale[U_COMPONENT][i] = 0.25f / cm->quanttbl[U_COMPONENT][i];
-    cm->quant_scale[V_COMPONENT][i] = 0.25f / cm->quanttbl[V_COMPONENT][i];
+    cm->quant_scale[Y_COMPONENT][i] = (__fp16)(0.25f / cm->quanttbl[Y_COMPONENT][i]);
+    cm->quant_scale[U_COMPONENT][i] = (__fp16)(0.25f / cm->quanttbl[U_COMPONENT][i]);
+    cm->quant_scale[V_COMPONENT][i] = (__fp16)(0.25f / cm->quanttbl[V_COMPONENT][i]);
   }
-
   return cm;
 }
 

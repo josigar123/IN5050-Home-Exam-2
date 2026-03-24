@@ -37,6 +37,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   int h = cm->padh[color_component];
 
   /* Make sure we are within bounds of reference frame. */
+  // Kan bruke neon compare instruksjoner?
   if (left < 0)
   {
     left = 0;
@@ -75,7 +76,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     {
       int sad = sad_block_8x8(orig_addr, ref_addr + x, w);
 
-      if (sad < best_sad)
+      if (sad < best_sad) // Can bruke NEON compare her?
       {
         best_mv_x = x - mx;
         best_mv_y = y - my;

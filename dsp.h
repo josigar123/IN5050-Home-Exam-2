@@ -7,7 +7,7 @@
 #include <arm_neon.h>
 
 void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
-                         float *quant_scale);
+                         float16_t *quant_scale);
 
 void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
                             uint8_t *quant_tbl);
