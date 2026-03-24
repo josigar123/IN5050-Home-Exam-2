@@ -189,12 +189,12 @@ struct c63_common *init_c63_enc(int width, int height)
     cm->quanttbl[V_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
 
     // Precompute zig-zag indeces and write to table (defined in tables.h, declared in tables.c)
-    zigzag_index[i] = zigzag_V[i] * 8 + zigzag_U[i];
+    zigzag_index[i] = (zigzag_V[i] * 8) + zigzag_U[i];
 
-    // Init scale quant so we only do mul in hot-loop for quantization
-    cm->quant_scale[Y_COMPONENT][i] = (__fp16)(0.25f / cm->quanttbl[Y_COMPONENT][i]);
-    cm->quant_scale[U_COMPONENT][i] = (__fp16)(0.25f / cm->quanttbl[U_COMPONENT][i]);
-    cm->quant_scale[V_COMPONENT][i] = (__fp16)(0.25f / cm->quanttbl[V_COMPONENT][i]);
+    // Init scale quant so we only do mul in hot-loop for quantization, also apply scale to deprecate scale_block
+    cm->quant_scale[Y_COMPONENT][i] = (__fp16)((0.25f / cm->quanttbl[Y_COMPONENT][i]) * (float)scale_lut[zigzag_V[i]][zigzag_U[i]]);
+    cm->quant_scale[U_COMPONENT][i] = (__fp16)((0.25f / cm->quanttbl[U_COMPONENT][i]) * (float)scale_lut[zigzag_V[i]][zigzag_U[i]]);
+    cm->quant_scale[V_COMPONENT][i] = (__fp16)((0.25f / cm->quanttbl[V_COMPONENT][i]) * (float)scale_lut[zigzag_V[i]][zigzag_U[i]]);
   }
   return cm;
 }

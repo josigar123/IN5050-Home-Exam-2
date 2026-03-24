@@ -4,6 +4,7 @@
 
 #include <arm_neon.h>
 #include <inttypes.h>
+#include "c63.h"
 
 uint8_t yquanttbl_def[64] __attribute__((aligned(16))) =
     {
@@ -394,3 +395,14 @@ float16_t dctlookup[8][8] =
 };
 
 uint8_t zigzag_index[64]; // Declaration
+
+float16_t scale_lut[8][8] = {
+    {(__fp16)0.5, (__fp16)ISQRT2, (__fp16)ISQRT2, (__fp16)ISQRT2, (__fp16)ISQRT2, (__fp16)ISQRT2, (__fp16)ISQRT2, (__fp16)ISQRT2},
+    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
+    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
+    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
+    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
+    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
+    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
+    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
+};

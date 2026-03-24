@@ -16,18 +16,6 @@
 //   double per_call_ns = ((t1.tv_sec - t0.tv_sec) * 1e9 + (t1.tv_nsec - t0.tv_nsec)) / 1000000.0;
 //   printf("%.1f ns per call\n", per_call_ns);
 
-// A look-up table for scale-block to avoid branching in inner-loop
-static const float16_t scale_lut[8][8] = {
-    {(__fp16)0.5, (__fp16)ISQRT2, (__fp16)ISQRT2, (__fp16)ISQRT2, (__fp16)ISQRT2, (__fp16)ISQRT2, (__fp16)ISQRT2, (__fp16)ISQRT2},
-    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
-    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
-    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
-    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
-    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
-    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
-    {(__fp16)ISQRT2, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f, (__fp16)1.0f},
-};
-
 // For bward compat with idct, remove when converted to SIMD
 static void transpose_block(float *in_data, float *out_data)
 {
@@ -140,22 +128,6 @@ static void idct_1d(float *in_data, float *out_data)
   }
 }
 
-static void scale_block_f16(float16_t *in_data, float16_t *out_data)
-{
-#pragma unroll
-  for (int v = 0; v < 8; ++v)
-  {
-    // Load the appropriate scales into 4 lanes (1 row total)
-    float16x8_t scale = vld1q_f16(&scale_lut[v][0]);
-
-    // Load the input data for the row (first 4 values and next 4 values)
-    float16x8_t in = vld1q_f16(&in_data[v << 3]);
-
-    // Write scaled values to out-data
-    vst1q_f16(&out_data[v << 3], vmulq_f16(in, scale));
-  }
-}
-
 static void quantize_block(float16_t *in_data, float16_t *out_data, float16_t *quant_scale)
 {
   float16_t gathered_coeffs[64] __attribute((aligned(16))); // 16 byte aligned array
@@ -224,15 +196,13 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
   }
   transpose_block_f16(mb, mb2);
 
-  scale_block_f16(mb2, mb);
-
-  quantize_block(mb, mb2, quant_scale);
+  quantize_block(mb2, mb, quant_scale);
 
 #pragma unroll
   for (i = 0; i < 64; i += 8)
   {
     // Convert to s16 from f16, 8 vals at a time
-    vst1q_s16(out_data + i, vcvtq_s16_f16(vld1q_f16(mb2 + i)));
+    vst1q_s16(out_data + i, vcvtq_s16_f16(vld1q_f16(mb + i)));
   }
 }
 
