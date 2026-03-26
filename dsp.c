@@ -112,20 +112,15 @@ static inline void dct_1d(float16_t *in_data, float16_t *out_data)
   vst1q_f16(out_data, vaddq_f16(acc0, acc1));
 }
 
-static void idct_1d(float *in_data, float *out_data)
+static inline void idct_1d(float16_t *in_data, float16_t *out_data)
 {
-  int i, j;
-  for (i = 0; i < 8; ++i)
+  float16x8_t acc0 = vdupq_n_f16((__fp16)0.0f), acc1 = vdupq_n_f16((__fp16)0.0f);
+  for (int i = 0; i < 8; i += 2)
   {
-    float idct = 0;
-
-    for (j = 0; j < 8; ++j)
-    {
-      idct += in_data[j] * (float)dctlookup[i][j];
-    }
-
-    out_data[i] = idct;
+    acc0 = vfmaq_f16(acc0, vdupq_n_f16(in_data[i]),     vld1q_f16(&dctlookup[i][0]));
+    acc1 = vfmaq_f16(acc1, vdupq_n_f16(in_data[i + 1]), vld1q_f16(&dctlookup[i + 1][0]));
   }
+  vst1q_f16(out_data, vaddq_f16(acc0, acc1));
 }
 
 static void quantize_block(float16_t *in_data, float16_t *out_data, float16_t *quant_scale)
@@ -146,20 +141,26 @@ static void quantize_block(float16_t *in_data, float16_t *out_data, float16_t *q
   }
 }
 
-static void dequantize_block(float *in_data, float *out_data,
-                             uint8_t *quant_tbl)
+static void dequantize_block(float16_t *in_data, float16_t *out_data, float16_t *dequant_scale)
 {
-  int zigzag;
+  float16_t temp[64] __attribute__((aligned(16)));
 
-  for (zigzag = 0; zigzag < 64; ++zigzag)
+  // Step 1: SIMD dequant (flat domain)
+  for (int i = 0; i < 64; i += 8)
   {
-    uint8_t u = zigzag_U[zigzag];
-    uint8_t v = zigzag_V[zigzag];
+    float16x8_t coeffs = vld1q_f16(in_data + i);
+    float16x8_t scale  = vld1q_f16(dequant_scale + i);
 
-    float dct = in_data[zigzag];
+    float16x8_t result = vmulq_f16(coeffs, scale);   // multiply (reverse quant)
+    result = vrndiq_f16(result); //removed rounding, probably not needed
 
-    /* Zig-zag and de-quantize */
-    out_data[v * 8 + u] = (float)round((dct * quant_tbl[zigzag]) / 4.0);
+    vst1q_f16(temp + i, result);
+  }
+
+  // Step 2: Scatter back (reverse zigzag)
+  for (int i = 0; i < 64; ++i)
+  {
+    out_data[zigzag_index[i]] = temp[i];
   }
 }
 
@@ -206,6 +207,7 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
   }
 }
 
+/*
 void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
                             uint8_t *quant_tbl)
 {
@@ -222,7 +224,7 @@ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
   dequantize_block(mb, mb2, quant_tbl);
   scale_block(mb2, mb);
 
-  /* Two 1D inverse DCT operations with transpose */
+  // Two 1D inverse DCT operations with transpose 
   for (v = 0; v < 8; ++v)
   {
     idct_1d(mb + v * 8, mb2 + v * 8);
@@ -239,3 +241,53 @@ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
     out_data[i] = mb[i];
   }
 }
+*/
+
+
+void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
+                            uint8_t *quant_tbl)
+{
+  float16_t mb[64] __attribute__((aligned(16)));
+  float16_t mb2[64] __attribute__((aligned(16)));
+  float16_t dequant_scale[64] __attribute__((aligned(16)));
+
+  int i, v;
+
+  for (i = 0; i < 64; i += 8)
+  {
+    int16x8_t in_vec = vld1q_s16(in_data + i);
+    uint8x8_t q_u8 = vld1_u8(quant_tbl + i);
+    uint16x8_t q_u16 = vmovl_u8(q_u8);
+    int16x8_t q_s16 = vreinterpretq_s16_u16(q_u16);
+
+    vst1q_f16(mb + i, vcvtq_f16_s16(in_vec));
+    vst1q_f16(dequant_scale + i, vcvtq_f16_s16(q_s16));
+  }
+
+  dequantize_block(mb, mb2, dequant_scale);
+
+  for (v = 0; v < 8; ++v)
+  {
+    float16x8_t row = vld1q_f16(mb2 + v * 8);
+    float16x8_t scale = vld1q_f16(&scale_lut[v][0]);
+    vst1q_f16(mb + v * 8, vmulq_f16(row, scale));
+  }
+
+  // Two 1D inverse DCT operations with transpose 
+  for (v = 0; v < 8; ++v)
+  {
+    idct_1d(mb + v * 8, mb2 + v * 8);
+  }
+  transpose_block_f16(mb2, mb);
+  for (v = 0; v < 8; ++v)
+  {
+    idct_1d(mb + v * 8, mb2 + v * 8);
+  }
+  transpose_block_f16(mb2, mb);
+
+  for (i = 0; i < 64; i += 8)
+  {
+    vst1q_s16(out_data + i, vcvtq_s16_f16(vld1q_f16(mb + i)));
+  }
+}
+
