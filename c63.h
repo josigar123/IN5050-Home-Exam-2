@@ -102,6 +102,7 @@ struct c63_common
 
   uint8_t quanttbl[COLOR_COMPONENTS][64];
   float16_t quant_scale[COLOR_COMPONENTS][64]; // Scaled dct 0.25*quant_values, drop div in hot-loop
+  float16_t dequant_scale[COLOR_COMPONENTS][64];
 
   struct frame *refframe;
   struct frame *curframe;

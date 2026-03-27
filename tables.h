@@ -19,6 +19,7 @@ extern uint8_t zigzag_V[64];
 extern uint8_t zigzag_index[64];  // Holds precomputed zig-zag indeces for quant
 extern float16_t scale_lut[8][8]; // A look-up table for scale-block to avoid branching
 extern float16_t dctlookup[8][8];
+extern float16_t idctlookup[8][8];
 extern uint16_t MVVLC[8];
 extern uint8_t MVVLC_Size[8];
 

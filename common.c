@@ -10,57 +10,50 @@
 #include "common.h"
 #include "dsp.h"
 
-void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h,
-                         int y, uint8_t *out_data, uint8_t *quantization)
+inline void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h,
+                                int y, uint8_t *out_data, float16_t *dequant_scale)
 {
-  int x;
+  // Process 2 MBs at a time
+  int16_t block_a[64] __attribute__((aligned(16)));
+  int16_t block_b[64] __attribute__((aligned(16)));
 
-  int16_t block[8 * 8];
-
-  /* Perform the dequantization and iDCT */
-  for (x = 0; x < w; x += 8)
+/* Perform the dequantization and iDCT */
+#pragma unroll
+  for (int x = 0; x < w; x += 16)
   {
-    int i, j;
+    dequant_idct_block_8x8(in_data + (x * 8), block_a, dequant_scale);
+    dequant_idct_block_8x8(in_data + ((x + 8) * 8), block_b, dequant_scale);
 
-    dequant_idct_block_8x8(in_data + (x * 8), block, quantization);
-
-    for (i = 0; i < 8; ++i)
+#pragma unroll
+    for (int i = 0; i < 8; ++i)
     {
-      for (j = 0; j < 8; ++j)
-      {
-        /* Add prediction block. Note: DCT is not precise -
-           Clamp to legal values */
-        int16_t tmp = block[i * 8 + j] + (int16_t)prediction[i * w + j + x];
+      // Load two rows from two different mbs
+      uint8x16_t pred = vld1q_u8(prediction + i * w + x);
 
-        if (tmp < 0)
-        {
-          tmp = 0;
-        }
-        else if (tmp > 255)
-        {
-          tmp = 255;
-        }
+      // Reconstruct the first row of the first block then second block
+      int16x8_t sum_a = vaddq_s16(vld1q_s16(block_a + i * 8), vreinterpretq_s16_u16(vmovl_u8(vget_low_u8(pred))));
+      int16x8_t sum_b = vaddq_s16(vld1q_s16(block_b + i * 8), vreinterpretq_s16_u16(vmovl_u8(vget_high_u8(pred))));
 
-        out_data[i * w + j + x] = tmp;
-      }
+      // Write back uint8 data, vqmovun_s16 narrows and saturates to uint8 removing manual clamping
+      vst1q_u8(out_data + i * w + x, vcombine_u8(vqmovun_s16(sum_a), vqmovun_s16(sum_b)));
     }
   }
 }
 
 void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
-                     uint32_t height, uint8_t *out_data, uint8_t *quantization)
+                     uint32_t height, uint8_t *out_data, float16_t *dequant_scale)
 {
   int y;
 
   for (y = 0; y < height; y += 8)
   {
     dequantize_idct_row(in_data + y * width, prediction + y * width, width, height, y,
-                        out_data + y * width, quantization);
+                        out_data + y * width, dequant_scale);
   }
 }
 
-void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
-                      int16_t *out_data, float16_t *quant_scale)
+inline void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
+                             int16_t *out_data, float16_t *quant_scale)
 {
   // Process 2 MBs at a time
   int16_t block_a[64] __attribute__((aligned(16)));

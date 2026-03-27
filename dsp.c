@@ -16,39 +16,7 @@
 //   double per_call_ns = ((t1.tv_sec - t0.tv_sec) * 1e9 + (t1.tv_nsec - t0.tv_nsec)) / 1000000.0;
 //   printf("%.1f ns per call\n", per_call_ns);
 
-// For bward compat with idct, remove when converted to SIMD
-static void transpose_block(float *in_data, float *out_data)
-{
-  int i, j;
-
-  for (i = 0; i < 8; ++i)
-  {
-    for (j = 0; j < 8; ++j)
-    {
-      out_data[i * 8 + j] = in_data[j * 8 + i];
-    }
-  }
-}
-
-// For bward compat with idct, remove when converted to SIMD
-static void scale_block(float *in_data, float *out_data)
-{
-  int u, v;
-
-  for (v = 0; v < 8; ++v)
-  {
-    for (u = 0; u < 8; ++u)
-    {
-      float a1 = !u ? ISQRT2 : 1.0f;
-      float a2 = !v ? ISQRT2 : 1.0f;
-
-      /* Scale according to normalizing function */
-      out_data[v * 8 + u] = in_data[v * 8 + u] * a1 * a2;
-    }
-  }
-}
-
-static void transpose_block_f16(float16_t *in_data, float16_t *out_data)
+static inline void transpose_block_f16(float16_t *in_data, float16_t *out_data)
 {
   // Load all 8 rows of f16s
   float16x8_t row0 = vld1q_f16(in_data);
@@ -97,6 +65,11 @@ static void transpose_block_f16(float16_t *in_data, float16_t *out_data)
   vst1q_f16(out_data + 56, vreinterpretq_f16_f64(trans_row7));
 }
 
+void init_idct_lookup()
+{
+  transpose_block_f16((float16_t *)dctlookup, (float16_t *)idctlookup);
+}
+
 // Calculates coefficients for 1 row
 static inline void dct_1d(float16_t *in_data, float16_t *out_data)
 {
@@ -112,23 +85,20 @@ static inline void dct_1d(float16_t *in_data, float16_t *out_data)
   vst1q_f16(out_data, vaddq_f16(acc0, acc1));
 }
 
-static void idct_1d(float *in_data, float *out_data)
+static inline void idct_1d(float16_t *in_data, float16_t *out_data)
 {
-  int i, j;
-  for (i = 0; i < 8; ++i)
+
+  float16x8_t acc0 = vdupq_n_f16((__fp16)0.0f), acc1 = vdupq_n_f16((__fp16)0.0f);
+  for (int i = 0; i < 8; i += 2)
   {
-    float idct = 0;
-
-    for (j = 0; j < 8; ++j)
-    {
-      idct += in_data[j] * (float)dctlookup[i][j];
-    }
-
-    out_data[i] = idct;
+    acc0 = vfmaq_f16(acc0, vdupq_n_f16(in_data[i]), vld1q_f16(&idctlookup[i][0]));
+    acc1 = vfmaq_f16(acc1, vdupq_n_f16(in_data[i + 1]), vld1q_f16(&idctlookup[i + 1][0]));
   }
+
+  vst1q_f16(out_data, vaddq_f16(acc0, acc1));
 }
 
-static void quantize_block(float16_t *in_data, float16_t *out_data, float16_t *quant_scale)
+static inline void quantize_block(float16_t *in_data, float16_t *out_data, float16_t *quant_scale)
 {
   float16_t gathered_coeffs[64] __attribute((aligned(16))); // 16 byte aligned array
 #pragma unroll
@@ -146,51 +116,50 @@ static void quantize_block(float16_t *in_data, float16_t *out_data, float16_t *q
   }
 }
 
-static void dequantize_block(float *in_data, float *out_data,
-                             uint8_t *quant_tbl)
+static inline void dequantize_block(int16_t *in_data, float16_t *out_data,
+                                    float16_t *dequant_scale)
 {
-  int zigzag;
+  float16_t dequantized_coeffs[64] __attribute__((aligned(16))); // 16 byte aligned array
 
-  for (zigzag = 0; zigzag < 64; ++zigzag)
+#pragma unroll
+  // Gather coeffs in zigzag order
+  for (int i = 0; i < 64; i += 8)
   {
-    uint8_t u = zigzag_U[zigzag];
-    uint8_t v = zigzag_V[zigzag];
+    // Load 8 coeffs and dequant them, convert to f16 from input
+    vst1q_f16(dequantized_coeffs + i, vmulq_f16(vcvtq_f16_s16(vld1q_s16(in_data + i)), vld1q_f16(dequant_scale + i)));
+  }
 
-    float dct = in_data[zigzag];
-
-    /* Zig-zag and de-quantize */
-    out_data[v * 8 + u] = (float)round((dct * quant_tbl[zigzag]) / 4.0);
+#pragma unroll
+  // Write in de-zigzag, so its in normal row-major mb
+  for (int i = 0; i < 64; ++i)
+  {
+    out_data[zigzag_index[i]] = dequantized_coeffs[i];
   }
 }
 
-void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
-                         float16_t *quant_scale)
+inline void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
+                                float16_t *quant_scale)
 {
   float16_t mb[64] __attribute__((aligned(16)));
   float16_t mb2[64] __attribute__((aligned(16)));
 
-  int i, v;
-
 #pragma unroll
-  for (i = 0; i < 64; i += 8)
+  for (int i = 0; i < 64; i += 8)
   {
-    // Read 8 signed 16-bit integers from in_data
-    int16x8_t in_i = vld1q_s16(in_data + i);
-
     // Store converted values in mb2
-    vst1q_f16(mb2 + i, vcvtq_f16_s16(in_i));
+    vst1q_f16(mb2 + i, vcvtq_f16_s16(vld1q_s16(in_data + i)));
   }
 
 /* Two 1D DCT operations with transpose */
 #pragma unroll
-  for (v = 0; v < 8; ++v)
+  for (int v = 0; v < 8; ++v)
   {
     dct_1d(mb2 + v * 8, mb + v * 8);
   }
   transpose_block_f16(mb, mb2);
 
 #pragma unroll
-  for (v = 0; v < 8; ++v)
+  for (int v = 0; v < 8; ++v)
   {
     dct_1d(mb2 + v * 8, mb + v * 8);
   }
@@ -199,43 +168,38 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
   quantize_block(mb2, mb, quant_scale);
 
 #pragma unroll
-  for (i = 0; i < 64; i += 8)
+  for (int i = 0; i < 64; i += 8)
   {
     // Convert to s16 from f16, 8 vals at a time
     vst1q_s16(out_data + i, vcvtq_s16_f16(vld1q_f16(mb + i)));
   }
 }
 
-void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
-                            uint8_t *quant_tbl)
+inline void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
+                                   float16_t *dequant_scale)
 {
-  float mb[8 * 8] __attribute((aligned(16)));
-  float mb2[8 * 8] __attribute((aligned(16)));
+  float16_t mb[64] __attribute__((aligned(16)));
+  float16_t mb2[64] __attribute__((aligned(16)));
 
-  int i, v;
-
-  for (i = 0; i < 64; ++i)
-  {
-    mb[i] = in_data[i];
-  }
-
-  dequantize_block(mb, mb2, quant_tbl);
-  scale_block(mb2, mb);
+  dequantize_block(in_data, mb2, dequant_scale);
 
   /* Two 1D inverse DCT operations with transpose */
-  for (v = 0; v < 8; ++v)
+#pragma unroll
+  for (int v = 0; v < 8; ++v)
   {
-    idct_1d(mb + v * 8, mb2 + v * 8);
+    idct_1d(mb2 + v * 8, mb + v * 8);
   }
-  transpose_block(mb2, mb);
-  for (v = 0; v < 8; ++v)
+  transpose_block_f16(mb, mb2);
+#pragma unroll
+  for (int v = 0; v < 8; ++v)
   {
-    idct_1d(mb + v * 8, mb2 + v * 8);
+    idct_1d(mb2 + v * 8, mb + v * 8);
   }
-  transpose_block(mb2, mb);
+  transpose_block_f16(mb, mb2);
 
-  for (i = 0; i < 64; ++i)
+#pragma unroll
+  for (int i = 0; i < 64; i += 8)
   {
-    out_data[i] = mb[i];
+    vst1q_s16(out_data + i, vcvtq_s16_f16(vld1q_f16(mb2 + i)));
   }
 }

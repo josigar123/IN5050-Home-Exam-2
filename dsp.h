@@ -6,11 +6,13 @@
 #include <inttypes.h>
 #include <arm_neon.h>
 
+void init_idct_lookup();
+
 void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
                          float16_t *quant_scale);
 
 void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
-                            uint8_t *quant_tbl);
+                            float16_t *dequant_scale);
 
 // Define as inline to remove function call overhead, as its called quite frequently
 __attribute__((always_inline)) static inline uint16_t sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride)

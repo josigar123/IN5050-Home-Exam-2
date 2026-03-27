@@ -12,7 +12,7 @@ void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
                   uint32_t height, int16_t *out_data, float16_t *quant_scale);
 
 void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
-                     uint32_t height, uint8_t *out_data, uint8_t *quantization);
+                     uint32_t height, uint8_t *out_data, float16_t *dequant_scale);
 
 void destroy_frame(struct frame *f);
 

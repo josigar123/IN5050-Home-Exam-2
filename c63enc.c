@@ -12,6 +12,7 @@
 #include "c63_write.h"
 #include "common.h"
 #include "me.h"
+#include "dsp.h"
 #include "tables.h"
 
 #include "nvtx3/nvToolsExt.h"
@@ -134,19 +135,19 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   nvtxRangePush("IDCT+DQ Y");
   dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y,
                   cm->ypw, cm->yph, cm->curframe->recons->Y,
-                  cm->quanttbl[Y_COMPONENT]);
+                  cm->dequant_scale[Y_COMPONENT]);
   nvtxRangePop();
 
   nvtxRangePush("IDCT+DQ U");
   dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U,
                   cm->upw, cm->uph, cm->curframe->recons->U,
-                  cm->quanttbl[U_COMPONENT]);
+                  cm->dequant_scale[U_COMPONENT]);
   nvtxRangePop();
 
   nvtxRangePush("IDCT+DQ V");
   dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V,
                   cm->vpw, cm->vph, cm->curframe->recons->V,
-                  cm->quanttbl[V_COMPONENT]);
+                  cm->dequant_scale[V_COMPONENT]);
   nvtxRangePop();
 }
 
@@ -195,7 +196,15 @@ struct c63_common *init_c63_enc(int width, int height)
     cm->quant_scale[Y_COMPONENT][i] = (__fp16)((0.25f / cm->quanttbl[Y_COMPONENT][i]) * (float)scale_lut[zigzag_V[i]][zigzag_U[i]]);
     cm->quant_scale[U_COMPONENT][i] = (__fp16)((0.25f / cm->quanttbl[U_COMPONENT][i]) * (float)scale_lut[zigzag_V[i]][zigzag_U[i]]);
     cm->quant_scale[V_COMPONENT][i] = (__fp16)((0.25f / cm->quanttbl[V_COMPONENT][i]) * (float)scale_lut[zigzag_V[i]][zigzag_U[i]]);
+
+    cm->dequant_scale[Y_COMPONENT][i] = (__fp16)(0.25f * cm->quanttbl[Y_COMPONENT][i] * (float)scale_lut[zigzag_V[i]][zigzag_U[i]]);
+    cm->dequant_scale[U_COMPONENT][i] = (__fp16)(0.25f * cm->quanttbl[U_COMPONENT][i] * (float)scale_lut[zigzag_V[i]][zigzag_U[i]]);
+    cm->dequant_scale[V_COMPONENT][i] = (__fp16)(0.25f * cm->quanttbl[V_COMPONENT][i] * (float)scale_lut[zigzag_V[i]][zigzag_U[i]]);
   }
+
+  // Transposes dctlookup so we get idctlookup
+  init_idct_lookup();
+
   return cm;
 }
 

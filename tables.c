@@ -393,6 +393,7 @@ float16_t dctlookup[8][8] =
             (__fp16) - 0.195090f,
         },
 };
+float16_t idctlookup[8][8];
 
 uint8_t zigzag_index[64]; // Declaration
 
