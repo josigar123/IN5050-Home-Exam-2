@@ -137,8 +137,8 @@ static inline void dequantize_block(int16_t *in_data, float16_t *out_data,
   }
 }
 
-inline void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
-                                float16_t *quant_scale)
+__attribute__((always_inline)) inline void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
+                                                               float16_t *quant_scale)
 {
   float16_t mb[64] __attribute__((aligned(16)));
   float16_t mb2[64] __attribute__((aligned(16)));
@@ -175,8 +175,8 @@ inline void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
   }
 }
 
-inline void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
-                                   float16_t *dequant_scale)
+__attribute__((always_inline)) inline void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
+                                                                  float16_t *dequant_scale)
 {
   float16_t mb[64] __attribute__((aligned(16)));
   float16_t mb2[64] __attribute__((aligned(16)));

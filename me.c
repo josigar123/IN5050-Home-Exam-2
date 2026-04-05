@@ -160,6 +160,7 @@ void c63_motion_compensate(struct c63_common *cm)
 
   /* Luma */
   nvtxRangePush("MC Luma");
+#pragma omp parallel for schedule(static) private(mb_x)
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
     for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
@@ -172,6 +173,7 @@ void c63_motion_compensate(struct c63_common *cm)
 
   /* Chroma */
   nvtxRangePush("MC Chroma");
+#pragma omp parallel for schedule(static) private(mb_x)
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
     for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
