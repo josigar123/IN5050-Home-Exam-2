@@ -44,7 +44,7 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
                      uint32_t height, uint8_t *out_data, float16_t *dequant_scale)
 {
   int y;
-
+  #pragma omp parallel for schedule(static)
   for (y = 0; y < height; y += 8)
   {
     dequantize_idct_row(in_data + y * width, prediction + y * width, width, height, y,
@@ -89,8 +89,8 @@ inline void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
 void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
                   uint32_t height, int16_t *out_data, float16_t *quant_scale)
 {
-#pragma unroll
-  for (int y = 0; y < height; y += 8)
+  #pragma omp parallel for schedule(static)
+  for (int y = 0; y < (int)height; y += 8)
   {
     dct_quantize_row(in_data + y * width, prediction + y * width, width,
                      out_data + y * width, quant_scale);
