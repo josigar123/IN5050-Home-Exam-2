@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <assert.h>
 #include <errno.h>
 #include <getopt.h>
@@ -7,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 #include "c63.h"
 #include "c63_write.h"
@@ -28,6 +31,20 @@ static uint32_t height;
 /* getopt */
 extern int optind;
 extern char *optarg;
+
+// A context struct passed to thread functions so they can execute correctly
+typedef struct
+{
+  struct c63_common *cm;
+  yuv_t *images[3];
+  struct frame *frames[3];
+  FILE *infile;
+  sem_t slot_free;
+  sem_t ready_to_encode;
+  sem_t ready_to_write;
+  int num_frames_total; // Set by reader thread at EOF
+  int limit_numframes;
+} pipeline_ctx_t;
 
 static yuv_t *alloc_input_image(struct c63_common *cm)
 {
@@ -61,7 +78,7 @@ static int read_yuv_into_from(yuv_t *image, FILE *file)
   if (ferror(file))
   {
     perror("ferror");
-    exit(EXIT_FAILURE);
+    return -1;
   }
 
   if (feof(file))
@@ -78,13 +95,15 @@ static int read_yuv_into_from(yuv_t *image, FILE *file)
   return 1;
 }
 
-static void c63_encode_image(struct c63_common *cm, yuv_t *image)
+static void c63_encode_image(struct c63_common *cm, struct frame **frames, int frame_index)
 {
   /* Advance to next frame */
-  struct frame *old_refframe = cm->refframe;
-  cm->refframe = cm->curframe;
-  cm->curframe = old_refframe;
-  cm->curframe->orig = image; // curframe must point to the newly read image
+  // Modulo to move throuhg 3 item ring-buffer
+  struct frame *curframe = frames[frame_index % 3];
+  struct frame *refframe = frames[(frame_index + 2) % 3];
+  cm->curframe = curframe;
+  cm->refframe = refframe;
+  yuv_t *image = curframe->orig;
 
   /* Check if keyframe */
   if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
@@ -149,6 +168,76 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
                   cm->vpw, cm->vph, cm->curframe->recons->V,
                   cm->dequant_scale[V_COMPONENT]);
   nvtxRangePop();
+
+  ++cm->framenum;
+  ++cm->frames_since_keyframe;
+}
+
+// Reader thread
+void *reader_thread(void *arg)
+{
+  pipeline_ctx_t *ctx = (pipeline_ctx_t *)arg;
+  for (int i = 0;; i++)
+  {
+    printf("Reading frame %d, ", i);
+    // Wait for free slot
+    sem_wait(&ctx->slot_free);
+    int slot = i % 3;
+    if (!read_yuv_into_from(ctx->images[slot], ctx->infile))
+    {
+      ctx->num_frames_total = i;
+      // Post to encode last frame
+      sem_post(&ctx->ready_to_encode);
+      break;
+    }
+    // Post that frame is ready to encode
+    sem_post(&ctx->ready_to_encode);
+
+    // Encode last frame if a limit on frames to encode is set
+    if (ctx->limit_numframes && (i + 1) >= ctx->limit_numframes)
+    {
+      ctx->num_frames_total = i + 1;
+      sem_post(&ctx->ready_to_encode);
+      break;
+    }
+  }
+  return NULL;
+}
+
+void *encoder_thread(void *arg)
+{
+  pipeline_ctx_t *ctx = (pipeline_ctx_t *)arg;
+  for (int i = 0;; i++)
+  {
+    sem_wait(&ctx->ready_to_encode); // Wait for a frame ready for encoding
+    if (i == ctx->num_frames_total)
+    {
+      break;
+    }
+    int slot = i % 3;
+    printf("Encoding frame %d, ", i);
+    c63_encode_image(ctx->cm, ctx->frames, i);
+    sem_post(&ctx->ready_to_write);
+  }
+  sem_post(&ctx->ready_to_write); // Signal ready to write when finished encoding
+  return NULL;
+}
+
+void *writer_thread(void *arg)
+{
+  pipeline_ctx_t *ctx = (pipeline_ctx_t *)arg;
+  for (int i = 0;; i++)
+  {
+    printf("Writing frame %d, ", i);
+    sem_wait(&ctx->ready_to_write); // Wait for a frame ready for writing
+    if (i == ctx->num_frames_total)
+      break;
+    int slot = i % 3;
+    write_frame(ctx->cm, ctx->frames[slot]);
+    printf("Done!\n");
+    sem_post(&ctx->slot_free); // Signal free slot after writing
+  }
+  return NULL;
 }
 
 struct c63_common *init_c63_enc(int width, int height)
@@ -224,6 +313,16 @@ static void print_help()
 int main(int argc, char **argv)
 {
   int c;
+  setbuf(stdout, NULL); // To not buffer I/O, so prints appear
+
+  // ctx for threads
+  pipeline_ctx_t ctx = {0};
+  ctx.num_frames_total = -1;
+  pthread_t reader, encoder, writer;
+  // Init semaphores for 3 in-flight frames
+  sem_init(&ctx.slot_free, 0, 3);
+  sem_init(&ctx.ready_to_encode, 0, 0);
+  sem_init(&ctx.ready_to_write, 0, 0);
 
   if (argc == 1)
   {
@@ -284,48 +383,51 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  /* Encode input frames */
   int numframes = 0;
 
-  // Allocate image once, reuse
-  yuv_t *image = alloc_input_image(cm);
+  // Allocate for 3 in-flight frames
+  yuv_t *images[3];
+  images[0] = alloc_input_image(cm);
+  images[1] = alloc_input_image(cm);
+  images[2] = alloc_input_image(cm);
 
-  struct frame *frame_a = create_frame(cm, image);
-  struct frame *frame_b = create_frame(cm, image);
-  cm->refframe = frame_a;
-  cm->curframe = frame_b;
+  // Allocate for 3 in-flight frames
+  struct frame *frames[3];
+  frames[0] = create_frame(cm, images[0]);
+  frames[1] = create_frame(cm, images[1]);
+  frames[2] = create_frame(cm, images[2]);
+
   cm->framenum = 0;
   cm->frames_since_keyframe = 0;
 
-  while (1)
-  {
-    if (!read_yuv_into_from(image, infile))
-    {
-      break;
-    }
+  // Populate thread context struct for pipeline
+  ctx.cm = cm;
+  ctx.infile = infile;
+  ctx.limit_numframes = limit_numframes;
+  ctx.images[0] = images[0];
+  ctx.images[1] = images[1];
+  ctx.images[2] = images[2];
+  ctx.frames[0] = frames[0];
+  ctx.frames[1] = frames[1];
+  ctx.frames[2] = frames[2];
 
-    printf("Encoding frame %d, ", numframes);
-    c63_encode_image(cm, image);
+  // Start threads for pipeline
+  pthread_create(&reader, NULL, reader_thread, &ctx);
+  pthread_create(&encoder, NULL, encoder_thread, &ctx);
+  pthread_create(&writer, NULL, writer_thread, &ctx);
 
-    nvtxRangePush("Write frame");
-    write_frame(cm);
-    nvtxRangePop();
-    ++cm->framenum;
-    ++cm->frames_since_keyframe;
+  // Join to mainthread
+  pthread_join(reader, NULL);
+  pthread_join(encoder, NULL);
+  pthread_join(writer, NULL);
 
-    printf("Done!\n");
-
-    ++numframes;
-
-    if (limit_numframes && numframes >= limit_numframes)
-    {
-      break;
-    }
-  }
-
-  destroy_frame(frame_a);
-  destroy_frame(frame_b);
-  free_input_image(image);
+  // Cleanup
+  destroy_frame(frames[0]);
+  destroy_frame(frames[1]);
+  destroy_frame(frames[2]);
+  free_input_image(images[0]);
+  free_input_image(images[1]);
+  free_input_image(images[2]);
   free(cm);
   fclose(outfile);
   fclose(infile);

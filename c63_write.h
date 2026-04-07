@@ -4,6 +4,7 @@
 #include "c63.h"
 
 // Declaration
-void write_frame(struct c63_common *cm);
+// Add frame to signature, this is to avoid a race when encoding reads from refframe
+void write_frame(struct c63_common *cm, struct frame *frame);
 
-#endif  /* C63_WRITE_H_ */
+#endif /* C63_WRITE_H_ */
