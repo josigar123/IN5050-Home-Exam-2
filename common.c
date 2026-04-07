@@ -44,7 +44,6 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
                      uint32_t height, uint8_t *out_data, float16_t *dequant_scale)
 {
   int y;
-
   for (y = 0; y < height; y += 8)
   {
     dequantize_idct_row(in_data + y * width, prediction + y * width, width, height, y,
