@@ -268,6 +268,9 @@ int main(int argc, char **argv)
 
   struct c63_common *cm = init_c63_enc(width, height);
   cm->e_ctx.fp = outfile;
+  cm->e_ctx.out_buf = malloc(ENTROPY_BUF_SIZE);  // 4MB buffer
+  cm->e_ctx.out_pos = 0;
+  cm->e_ctx.out_capacity = ENTROPY_BUF_SIZE;
 
   input_file = argv[optind];
 
@@ -326,6 +329,7 @@ int main(int argc, char **argv)
   destroy_frame(frame_a);
   destroy_frame(frame_b);
   free_input_image(image);
+  free(cm->e_ctx.out_buf);
   free(cm);
   fclose(outfile);
   fclose(infile);

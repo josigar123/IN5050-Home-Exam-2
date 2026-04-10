@@ -90,7 +90,7 @@ void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
                   uint32_t height, int16_t *out_data, float16_t *quant_scale)
 {
   #pragma omp parallel for schedule(static)
-  for (int y = 0; y < (int)height; y += 8)
+  for (int y = 0; y < height; y += 8)
   {
     dct_quantize_row(in_data + y * width, prediction + y * width, width,
                      out_data + y * width, quant_scale);

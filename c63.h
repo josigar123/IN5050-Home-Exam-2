@@ -62,11 +62,15 @@ struct dct
 typedef struct yuv yuv_t;
 typedef struct dct dct_t;
 
+#define ENTROPY_BUF_SIZE (4 * 1024 * 1024)  // 4MB, tune to your typical frame size
 struct entropy_ctx
 {
   FILE *fp;
   unsigned int bit_buffer;
   unsigned int bit_buffer_width;
+  uint8_t *out_buf;       // heap-allocated write buffer
+  size_t   out_pos;       // current write position
+  size_t   out_capacity;  // total buffer size
 };
 
 struct macroblock
