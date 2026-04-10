@@ -66,11 +66,19 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   int best_sad = INT_MAX;
 
   uint8_t *orig_addr = orig + my * w + mx; // Unchanging, hoisted out of loop
+  // uint8x8_t o0 = vld1_u8(orig_addr);
+  // uint8x8_t o1 = vld1_u8(orig_addr + w);
+  // uint8x8_t o2 = vld1_u8(orig_addr + 2 * w);
+  // uint8x8_t o3 = vld1_u8(orig_addr + 3 * w);
+  // uint8x8_t o4 = vld1_u8(orig_addr + 4 * w);
+  // uint8x8_t o5 = vld1_u8(orig_addr + 5 * w);
+  // uint8x8_t o6 = vld1_u8(orig_addr + 6 * w);
+  // uint8x8_t o7 = vld1_u8(orig_addr + 7 * w);
 #pragma unroll
   for (y = top; y < bottom; ++y)
   {
     uint8_t *ref_addr = ref + y * w;                    // Hoist
-    __builtin_prefetch(ref + (y + 1) * w + left, 0, 0); // Hint at prefetch of next ref block, no locality, can be removed after access
+    __builtin_prefetch(ref + (y + 3) * w + left, 0, 3); // Hint at prefetch of next ref block, no locality, can be removed after access
 #pragma unroll
     for (x = left; x < right; ++x)
     {
@@ -82,6 +90,22 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
         best_mv_y = y - my;
         best_sad = sad;
       }
+
+      // uint16x8_t acc = vabdl_u8(o0, vld1_u8(ref_row + x + 0 * w));
+      // acc = vabal_u8(acc, o1, vld1_u8(ref_row + x + 1 * w));
+      // acc = vabal_u8(acc, o2, vld1_u8(ref_row + x + 2 * w));
+      // acc = vabal_u8(acc, o3, vld1_u8(ref_row + x + 3 * w));
+      // acc = vabal_u8(acc, o4, vld1_u8(ref_row + x + 4 * w));
+      // acc = vabal_u8(acc, o5, vld1_u8(ref_row + x + 5 * w));
+      // acc = vabal_u8(acc, o6, vld1_u8(ref_row + x + 6 * w));
+      // acc = vabal_u8(acc, o7, vld1_u8(ref_row + x + 7 * w));
+      // int sad = vaddvq_u16(acc);
+      // if (sad < best_sad)
+      // {
+      //   best_sad = sad;
+      //   best_mv_x = x - mx;
+      //   best_mv_y = y - my;
+      // }
     }
   }
 

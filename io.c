@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "io.h"
 
@@ -27,6 +28,22 @@ void put_bytes(FILE *fp, const void* data, unsigned int len)
     fprintf(stderr, "Error writing bytes\n");
     exit(EXIT_FAILURE);
   }
+}
+
+void put_byte_buf(struct entropy_ctx *c, uint8_t byte)
+{
+  c->out_buf[c->out_pos++] = byte;
+}
+
+void write_byte(struct c63_common *cm, uint8_t b)
+{
+  cm->e_ctx.out_buf[cm->e_ctx.out_pos++] = b;
+}
+
+void write_bytes(struct c63_common *cm, const void *data, unsigned int len)
+{
+  memcpy(cm->e_ctx.out_buf + cm->e_ctx.out_pos, data, len);
+  cm->e_ctx.out_pos += len;
 }
 
 uint8_t get_byte(FILE *fp)
@@ -79,9 +96,9 @@ void put_bits(struct entropy_ctx *c, uint16_t bits, uint8_t n)
   {
     uint8_t b = (uint8_t)(c->bit_buffer >> (c->bit_buffer_width - 8));
 
-    put_byte(c->fp, b);
+    put_byte_buf(c, b);
 
-    if(b == 0xff) { put_byte(c->fp, 0); }
+    if(b == 0xff) { put_byte_buf(c, 0); }
 
     c->bit_buffer_width -= 8;
   }
@@ -118,9 +135,9 @@ void flush_bits(struct entropy_ctx *c)
   if(c->bit_buffer > 0)
   {
     uint8_t b = c->bit_buffer << (8 - c->bit_buffer_width);
-    put_byte(c->fp, b);
+    put_byte_buf(c, b);
 
-    if(b == 0xff) { put_byte(c->fp, 0); }
+    if(b == 0xff) { put_byte_buf(c, 0); }
   }
 
   c->bit_buffer = 0;
