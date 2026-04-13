@@ -17,11 +17,6 @@ int frequencies[2][12];
 /* Start of Image (SOI) marker, contains no payload. */
 static void write_SOI(struct c63_common *cm)
 {
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, JPEG_DEF_MARKER);
-  put_byte(cm->e_ctx.fp, JPEG_SOI_MARKER);
-  */
-
   /* buffered write */
   write_byte(cm, JPEG_DEF_MARKER);
   write_byte(cm, JPEG_SOI_MARKER);
@@ -32,52 +27,24 @@ static void write_DQT(struct c63_common *cm)
 {
   int16_t size = 2 + (3 * 64 + 1);
 
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, JPEG_DEF_MARKER);
-  put_byte(cm->e_ctx.fp, JPEG_DQT_MARKER);
-  */
-
   /* buffered write */
   write_byte(cm, JPEG_DEF_MARKER);
   write_byte(cm, JPEG_DQT_MARKER);
 
   // Length of segment
-
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, size >> 8);
-  put_byte(cm->e_ctx.fp, size & 0xff);
-  */
-
   /* buffered write */
   write_byte(cm, size >> 8);
   write_byte(cm, size & 0xff);
 
   /* Quatization table for Y component */
-  /*
-  put_byte(cm->e_ctx.fp, Y_COMPONENT);
-  put_bytes(cm->e_ctx.fp, cm->quanttbl[Y_COMPONENT], 64);
-  */
-
   write_byte(cm, Y_COMPONENT);
   write_bytes(cm, cm->quanttbl[Y_COMPONENT], 64);
 
   /* Quantization table for U component */
-
-  /* unbuffered write
-   put_byte(cm->e_ctx.fp, U_COMPONENT);
-   put_bytes(cm->e_ctx.fp, cm->quanttbl[U_COMPONENT], 64);
-  */
-
   write_byte(cm, U_COMPONENT);
   write_bytes(cm, cm->quanttbl[U_COMPONENT], 64);
 
   /* Quantization table for V component */
-
-  /* unbuffered write
-  /*  put_byte(cm->e_ctx.fp, V_COMPONENT);
-  put_bytes(cm->e_ctx.fp, cm->quanttbl[V_COMPONENT], 64);
-  */
-
   write_byte(cm, V_COMPONENT);
   write_bytes(cm, cm->quanttbl[V_COMPONENT], 64);
 }
@@ -87,84 +54,37 @@ static void write_SOF0(struct c63_common *cm, struct frame *frame)
 {
   int16_t size = 8 + 3 * COLOR_COMPONENTS + 1;
 
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, JPEG_DEF_MARKER);
-  put_byte(cm->e_ctx.fp, JPEG_SOF_MARKER);
-  */
-
   write_byte(cm, JPEG_DEF_MARKER);
   write_byte(cm, JPEG_SOF_MARKER);
 
   /* Lenght of segment */
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, size >> 8);
-  put_byte(cm->e_ctx.fp, size & 0xff);
-  */
-
   write_byte(cm, size >> 8);
   write_byte(cm, size & 0xff);
 
   /* Precision */
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, 8);
-  */
-
   write_byte(cm, 8);
 
   /* Width and height */
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, cm->height >> 8);
-  put_byte(cm->e_ctx.fp, cm->height & 0xff);
-  put_byte(cm->e_ctx.fp, cm->width >> 8);
-  put_byte(cm->e_ctx.fp, cm->width & 0xff);
-  */
-
   write_byte(cm, cm->height >> 8);
   write_byte(cm, cm->height & 0xff);
   write_byte(cm, cm->width >> 8);
   write_byte(cm, cm->width & 0xff);
 
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, COLOR_COMPONENTS);
-  */
-
   write_byte(cm, COLOR_COMPONENTS);
-
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, 1);
-  put_byte(cm->e_ctx.fp, 0x22);
-  put_byte(cm->e_ctx.fp, 0);
-  */
 
   write_byte(cm, 1);    /* Component id */
   write_byte(cm, 0x22); /* hor | ver sampling factor */
   write_byte(cm, 0);    /* Quant. tbl. id */
 
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, 2);
-  put_byte(cm->e_ctx.fp, 0x11);
-  put_byte(cm->e_ctx.fp, 1);
-  */
-
   write_byte(cm, 2);    /* Component id */
   write_byte(cm, 0x11); /* hor | ver sampling factor */
   write_byte(cm, 1);    /* Quant. tbl. id */
-
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, 3);
-  put_byte(cm->e_ctx.fp, 0x11);
-  put_byte(cm->e_ctx.fp, 2);
-  */
 
   write_byte(cm, 3);    /* Component id */
   write_byte(cm, 0x11); /* hor | ver sampling factor */
   write_byte(cm, 2);    /* Quant. tbl. id */
 
   /* Is this a keyframe or not? */
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, cm->curframe->keyframe);
-  */
-
   write_byte(cm, frame->keyframe);
 }
 
@@ -179,12 +99,6 @@ static void write_DHT_HTS(struct c63_common *cm, uint8_t id, uint8_t *numlength,
     n += numlength[i];
   }
 
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, id);
-  put_bytes(cm->e_ctx.fp, numlength, 16);
-  put_bytes(cm->e_ctx.fp, data, n);
-  */
-
   write_byte(cm, id);
   write_bytes(cm, numlength, 16);
   write_bytes(cm, data, n);
@@ -196,20 +110,10 @@ static void write_DHT(struct c63_common *cm)
 {
   int16_t size = 0x01A2; /* 2 + n*(17+mi); */
 
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, JPEG_DEF_MARKER);
-  put_byte(cm->e_ctx.fp, JPEG_DHT_MARKER);
-  */
-
   write_byte(cm, JPEG_DEF_MARKER);
   write_byte(cm, JPEG_DHT_MARKER);
 
   /* Length of segment */
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, size >> 8);
-  put_byte(cm->e_ctx.fp, size & 0xff);
-  */
-
   write_byte(cm, size >> 8);
   write_byte(cm, size & 0xff);
 
@@ -230,37 +134,14 @@ static void write_SOS(struct c63_common *cm)
 {
   int16_t size = 6 + 2 * COLOR_COMPONENTS;
 
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, JPEG_DEF_MARKER);
-  put_byte(cm->e_ctx.fp, JPEG_SOS_MARKER);
-  */
-
   write_byte(cm, JPEG_DEF_MARKER);
   write_byte(cm, JPEG_SOS_MARKER);
 
   /* Length of the segment */
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, size >> 8);
-  put_byte(cm->e_ctx.fp, size & 0xff);
-  */
-
   write_byte(cm, size >> 8);
   write_byte(cm, size & 0xff);
 
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, COLOR_COMPONENTS);
-  */
-
   write_byte(cm, COLOR_COMPONENTS);
-
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, 1);
-  put_byte(cm->e_ctx.fp, 0x00);
-  put_byte(cm->e_ctx.fp, 2);
-  put_byte(cm->e_ctx.fp, 0x11);
-  put_byte(cm->e_ctx.fp, 3);
-  put_byte(cm->e_ctx.fp, 0x11);
-  */
 
   write_byte(cm, 1);    /* Component id */
   write_byte(cm, 0x00); /* DC | AC huff tbl */
@@ -268,12 +149,6 @@ static void write_SOS(struct c63_common *cm)
   write_byte(cm, 0x11); /* DC | AC huff tbl */
   write_byte(cm, 3);    /* Component id */
   write_byte(cm, 0x11); /* DC | AC huff tbl */
-
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, 0);
-  put_byte(cm->e_ctx.fp, 63);
-  put_byte(cm->e_ctx.fp, 0);
-  */
 
   write_byte(cm, 0);  /* ss, first AC */
   write_byte(cm, 63); /* se, last AC */
@@ -283,11 +158,6 @@ static void write_SOS(struct c63_common *cm)
 /* End of Image (EOI) marker, contains no payload. */
 static void write_EOI(struct c63_common *cm)
 {
-  /* unbuffered write
-  put_byte(cm->e_ctx.fp, JPEG_DEF_MARKER);
-  put_byte(cm->e_ctx.fp, JPEG_EOI_MARKER);
-  */
-
   write_byte(cm, JPEG_DEF_MARKER);
   write_byte(cm, JPEG_EOI_MARKER);
 }
@@ -374,24 +244,6 @@ static void write_block(struct c63_common *cm, struct frame *frame, int16_t *in_
   /* Residuals stored linear in memory */
   int16_t *block = &in_data[uoffset * 8 + voffset * width];
   int32_t num_ac = 0;
-
-#if 0
-  static int blocknum;
-  ++blocknum;
-
-  printf("Dump block %d:\n", blocknum);
-
-  for(i=0; i<8; ++i)
-  {
-    for (j=0; j<8; ++j)
-    {
-      printf(", %5d", block[i*8+j]);
-    }
-    printf("\n");
-  }
-
-  printf("Finished block\n\n");
-#endif
 
   /* Calculate DC component, and write to stream */
   int16_t dc = block[0] - *prev_DC;
