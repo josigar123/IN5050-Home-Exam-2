@@ -18,8 +18,6 @@
 #include "dsp.h"
 #include "tables.h"
 
-#include "nvtx3/nvToolsExt.h"
-
 static char *output_file, *input_file;
 FILE *outfile;
 
@@ -132,42 +130,30 @@ static void c63_encode_image(struct c63_common *cm, struct frame **frames, int f
     memset(pred->V, 0, cm->vpw * cm->vph);
   }
 
-  nvtxRangePush("DCT+Q Y");
   dct_quantize(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
                cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
                cm->quant_scale[Y_COMPONENT]);
-  nvtxRangePop();
 
-  nvtxRangePush("DCT+Q U");
   dct_quantize(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
                cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
                cm->quant_scale[U_COMPONENT]);
-  nvtxRangePop();
 
-  nvtxRangePush("DCT+Q V");
   dct_quantize(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
                cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
                cm->quant_scale[V_COMPONENT]);
-  nvtxRangePop();
 
   /* Reconstruct frame for inter-prediction */
-  nvtxRangePush("IDCT+DQ Y");
   dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y,
                   cm->ypw, cm->yph, cm->curframe->recons->Y,
                   cm->dequant_scale[Y_COMPONENT]);
-  nvtxRangePop();
 
-  nvtxRangePush("IDCT+DQ U");
   dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U,
                   cm->upw, cm->uph, cm->curframe->recons->U,
                   cm->dequant_scale[U_COMPONENT]);
-  nvtxRangePop();
 
-  nvtxRangePush("IDCT+DQ V");
   dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V,
                   cm->vpw, cm->vph, cm->curframe->recons->V,
                   cm->dequant_scale[V_COMPONENT]);
-  nvtxRangePop();
 
   ++cm->framenum;
   ++cm->frames_since_keyframe;

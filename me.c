@@ -8,8 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "nvtx3/nvToolsExt.h"
-
 #include "dsp.h"
 #include "me.h"
 
@@ -144,7 +142,6 @@ void c63_motion_estimate(struct c63_common *cm)
   int mb_x, mb_y;
 
   /* Luma */
-  nvtxRangePush("ME Luma");
 #pragma omp parallel for schedule(dynamic) private(mb_x)
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
@@ -154,10 +151,8 @@ void c63_motion_estimate(struct c63_common *cm)
                    cm->refframe->recons->Y, Y_COMPONENT);
     }
   }
-  nvtxRangePop();
 
   /* Chroma */
-  nvtxRangePush("ME Chroma");
 #pragma omp parallel for schedule(dynamic) private(mb_x)
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
@@ -169,7 +164,6 @@ void c63_motion_estimate(struct c63_common *cm)
                    cm->refframe->recons->V, V_COMPONENT);
     }
   }
-  nvtxRangePop();
 }
 
 /* Motion compensation for 8x8 block */
@@ -207,7 +201,6 @@ void c63_motion_compensate(struct c63_common *cm)
   int mb_x, mb_y;
 
   /* Luma */
-  nvtxRangePush("MC Luma");
 #pragma omp parallel for schedule(static) private(mb_x)
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
@@ -217,10 +210,8 @@ void c63_motion_compensate(struct c63_common *cm)
                    cm->refframe->recons->Y, Y_COMPONENT);
     }
   }
-  nvtxRangePop();
 
   /* Chroma */
-  nvtxRangePush("MC Chroma");
 #pragma omp parallel for schedule(static) private(mb_x)
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
@@ -232,5 +223,4 @@ void c63_motion_compensate(struct c63_common *cm)
                    cm->refframe->recons->V, V_COMPONENT);
     }
   }
-  nvtxRangePop();
 }

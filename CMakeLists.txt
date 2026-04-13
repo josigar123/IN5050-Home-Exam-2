@@ -21,8 +21,8 @@ set(CMAKE_C_FLAGS_DEBUG "-g -O1 -fno-tree-vectorize -ffast-math")
 
 # Debug compiles with -g or equivalent for debugging.
 # Change to Release for good speed.
-set(CMAKE_BUILD_TYPE Debug)
-# set(CMAKE_BUILD_TYPE Release)
+#set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
 #
 # If this is a Tegra or something similar, set our processor subrevision.
@@ -36,10 +36,6 @@ else()
   message(FATAL "Not compiling with an gcc")
 endif()
 
-find_path(NVTX_INCLUDE_DIR nvtx3/nvToolsExt.h
-  PATHS /usr/local/cuda/include /usr/local/cuda-11/include /usr/local/cuda-10/include
-  REQUIRED)
-
 
 find_package(OpenMP REQUIRED)
 
@@ -49,11 +45,10 @@ add_library(c63
 	           io.c io.h
 	           common.c common.h
 	           me.c me.h)
-target_include_directories(c63 PRIVATE ${NVTX_INCLUDE_DIR})
 
 add_executable(c63enc
                c63enc.c c63.h
 	       c63_write.c c63_write.h)
-target_include_directories(c63enc PRIVATE ${NVTX_INCLUDE_DIR})
+
 target_link_libraries(c63 OpenMP::OpenMP_C)
 target_link_libraries(c63enc c63 OpenMP::OpenMP_C m dl)
