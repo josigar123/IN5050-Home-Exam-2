@@ -7,15 +7,6 @@
 #include "dsp.h"
 #include "tables.h"
 
-// struct timespec t0, t1;
-//   clock_gettime(CLOCK_MONOTONIC, &t0);
-//   for (int i = 0; i < 1000000; i++)
-//     scale_block(mb2, mb);
-//   clock_gettime(CLOCK_MONOTONIC, &t1);
-
-//   double per_call_ns = ((t1.tv_sec - t0.tv_sec) * 1e9 + (t1.tv_nsec - t0.tv_nsec)) / 1000000.0;
-//   printf("%.1f ns per call\n", per_call_ns);
-
 static inline void transpose_block_f16(float16_t *in_data, float16_t *out_data)
 {
   // Load all 8 rows of f16s
@@ -75,6 +66,7 @@ static inline void dct_1d(float16_t *in_data, float16_t *out_data)
 {
   // Accumulator holding what is to be 8 coefficients (1 row)
   float16x8_t acc0 = vdupq_n_f16((__fp16)0.0f), acc1 = vdupq_n_f16((__fp16)0.0f);
+#pragma GCC unroll 4
   for (int i = 0; i < 8; i += 2)
   {
     // Do fused multiply-accumulate for DCT coeff
@@ -89,6 +81,7 @@ static inline void idct_1d(float16_t *in_data, float16_t *out_data)
 {
 
   float16x8_t acc0 = vdupq_n_f16((__fp16)0.0f), acc1 = vdupq_n_f16((__fp16)0.0f);
+#pragma GCC unroll 4
   for (int i = 0; i < 8; i += 2)
   {
     acc0 = vfmaq_f16(acc0, vdupq_n_f16(in_data[i]), vld1q_f16(&idctlookup[i][0]));
@@ -101,14 +94,14 @@ static inline void idct_1d(float16_t *in_data, float16_t *out_data)
 static inline void quantize_block(float16_t *in_data, float16_t *out_data, float16_t *quant_scale)
 {
   float16_t gathered_coeffs[64] __attribute((aligned(16))); // 16 byte aligned array
-#pragma unroll
+#pragma GCC unroll 64
   // Gather scattered coefficients with zigzag_index LUT
   for (int z = 0; z < 64; ++z)
   {
     gathered_coeffs[z] = in_data[zigzag_index[z]];
   }
 
-#pragma unroll
+#pragma GCC unroll 8
   for (int zigzag = 0; zigzag < 64; zigzag += 8)
   {
     // Quantize 4 coefficients: First load 4 coeffs and 4 quant scales, then multiply, then round, then store to out_data
@@ -121,7 +114,7 @@ static inline void dequantize_block(int16_t *in_data, float16_t *out_data,
 {
   float16_t dequantized_coeffs[64] __attribute__((aligned(16))); // 16 byte aligned array
 
-#pragma unroll
+#pragma GCC unroll 8
   // Gather coeffs in zigzag order
   for (int i = 0; i < 64; i += 8)
   {
@@ -129,7 +122,7 @@ static inline void dequantize_block(int16_t *in_data, float16_t *out_data,
     vst1q_f16(dequantized_coeffs + i, vmulq_f16(vcvtq_f16_s16(vld1q_s16(in_data + i)), vld1q_f16(dequant_scale + i)));
   }
 
-#pragma unroll
+#pragma GCC unroll 64
   // Write in de-zigzag, so its in normal row-major mb
   for (int i = 0; i < 64; ++i)
   {
@@ -143,7 +136,7 @@ inline void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
   float16_t mb[64] __attribute__((aligned(16)));
   float16_t mb2[64] __attribute__((aligned(16)));
 
-#pragma unroll
+#pragma GCC unroll 8
   for (int i = 0; i < 64; i += 8)
   {
     // Store converted values in mb2
@@ -151,14 +144,14 @@ inline void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
   }
 
 /* Two 1D DCT operations with transpose */
-#pragma unroll
+#pragma GCC unroll 8
   for (int v = 0; v < 8; ++v)
   {
     dct_1d(mb2 + v * 8, mb + v * 8);
   }
   transpose_block_f16(mb, mb2);
 
-#pragma unroll
+#pragma GCC unroll 8
   for (int v = 0; v < 8; ++v)
   {
     dct_1d(mb2 + v * 8, mb + v * 8);
@@ -167,7 +160,7 @@ inline void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
 
   quantize_block(mb2, mb, quant_scale);
 
-#pragma unroll
+#pragma GCC unroll 8
   for (int i = 0; i < 64; i += 8)
   {
     // Convert to s16 from f16, 8 vals at a time
@@ -184,20 +177,21 @@ inline void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
   dequantize_block(in_data, mb2, dequant_scale);
 
   /* Two 1D inverse DCT operations with transpose */
-#pragma unroll
-  for (int v = 0; v < 8; ++v)
-  {
-    idct_1d(mb2 + v * 8, mb + v * 8);
-  }
-  transpose_block_f16(mb, mb2);
-#pragma unroll
+#pragma GCC unroll 8
   for (int v = 0; v < 8; ++v)
   {
     idct_1d(mb2 + v * 8, mb + v * 8);
   }
   transpose_block_f16(mb, mb2);
 
-#pragma unroll
+#pragma GCC unroll 8
+  for (int v = 0; v < 8; ++v)
+  {
+    idct_1d(mb2 + v * 8, mb + v * 8);
+  }
+  transpose_block_f16(mb, mb2);
+
+#pragma GCC unroll 8
   for (int i = 0; i < 64; i += 8)
   {
     vst1q_s16(out_data + i, vcvtq_s16_f16(vld1q_f16(mb2 + i)));

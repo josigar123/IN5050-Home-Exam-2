@@ -66,46 +66,62 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   int best_sad = INT_MAX;
 
   uint8_t *orig_addr = orig + my * w + mx; // Unchanging, hoisted out of loop
-  // uint8x8_t o0 = vld1_u8(orig_addr);
-  // uint8x8_t o1 = vld1_u8(orig_addr + w);
-  // uint8x8_t o2 = vld1_u8(orig_addr + 2 * w);
-  // uint8x8_t o3 = vld1_u8(orig_addr + 3 * w);
-  // uint8x8_t o4 = vld1_u8(orig_addr + 4 * w);
-  // uint8x8_t o5 = vld1_u8(orig_addr + 5 * w);
-  // uint8x8_t o6 = vld1_u8(orig_addr + 6 * w);
-  // uint8x8_t o7 = vld1_u8(orig_addr + 7 * w);
-#pragma unroll
+  uint8x8_t orig_rows[8];
+
+  // Preload whole orig block into NEON registers
+#pragma GCC unroll 8
+  for (int r = 0; r < 8; ++r)
+  {
+    orig_rows[r] = vld1_u8(orig_addr + r * w);
+  }
+
   for (y = top; y < bottom; ++y)
   {
     uint8_t *ref_addr = ref + y * w;                    // Hoist
-    __builtin_prefetch(ref + (y + 3) * w + left, 0, 3); // Hint at prefetch of next ref block, no locality, can be removed after access
-#pragma unroll
-    for (x = left; x < right; ++x)
+    __builtin_prefetch(ref + (y + 3) * w + left, 0, 1); // Hint at prefetch of ref block
+    // Unroll inner loop by 4 to process more candidate blocks at once
+    for (x = left; x + 3 < right; x += 4)
     {
-      int sad = sad_block_8x8(orig_addr, ref_addr + x, w);
+      uint16_t sad0 = sad_block_8x8(orig_rows, ref_addr + x, w);
+      uint16_t sad1 = sad_block_8x8(orig_rows, ref_addr + x + 1, w);
+      uint16_t sad2 = sad_block_8x8(orig_rows, ref_addr + x + 2, w);
+      uint16_t sad3 = sad_block_8x8(orig_rows, ref_addr + x + 3, w);
 
-      if (sad < best_sad) // Can bruke NEON compare her?
+      if (sad0 < best_sad)
+      {
+        best_sad = sad0;
+        best_mv_x = x - mx;
+        best_mv_y = y - my;
+      }
+      if (sad1 < best_sad)
+      {
+        best_sad = sad1;
+        best_mv_x = x + 1 - mx;
+        best_mv_y = y - my;
+      }
+      if (sad2 < best_sad)
+      {
+        best_sad = sad2;
+        best_mv_x = x + 2 - mx;
+        best_mv_y = y - my;
+      }
+      if (sad3 < best_sad)
+      {
+        best_sad = sad3;
+        best_mv_x = x + 3 - mx;
+        best_mv_y = y - my;
+      }
+    }
+    // Handle tail after clamping
+    for (; x < right; ++x)
+    {
+      uint16_t s = sad_block_8x8(orig_rows, ref_addr + x, w);
+      if (s < best_sad)
       {
         best_mv_x = x - mx;
         best_mv_y = y - my;
-        best_sad = sad;
+        best_sad = s;
       }
-
-      // uint16x8_t acc = vabdl_u8(o0, vld1_u8(ref_row + x + 0 * w));
-      // acc = vabal_u8(acc, o1, vld1_u8(ref_row + x + 1 * w));
-      // acc = vabal_u8(acc, o2, vld1_u8(ref_row + x + 2 * w));
-      // acc = vabal_u8(acc, o3, vld1_u8(ref_row + x + 3 * w));
-      // acc = vabal_u8(acc, o4, vld1_u8(ref_row + x + 4 * w));
-      // acc = vabal_u8(acc, o5, vld1_u8(ref_row + x + 5 * w));
-      // acc = vabal_u8(acc, o6, vld1_u8(ref_row + x + 6 * w));
-      // acc = vabal_u8(acc, o7, vld1_u8(ref_row + x + 7 * w));
-      // int sad = vaddvq_u16(acc);
-      // if (sad < best_sad)
-      // {
-      //   best_sad = sad;
-      //   best_mv_x = x - mx;
-      //   best_mv_y = y - my;
-      // }
     }
   }
 
@@ -169,7 +185,7 @@ static void mc_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   uint8_t *ref_src = ref + (top + mb->mv_y) * w + (left + mb->mv_x);
   uint8_t *pred_dst = predicted + top * w + left;
 
-#pragma unroll
+#pragma GCC unroll 8
   /* Copy block from ref mandated by MV */
   for (int row = 0; row < 8; ++row)
   {
@@ -184,6 +200,7 @@ void c63_motion_compensate(struct c63_common *cm)
 
   /* Luma */
   nvtxRangePush("MC Luma");
+#pragma omp parallel for schedule(static) private(mb_x)
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
     for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
@@ -196,6 +213,7 @@ void c63_motion_compensate(struct c63_common *cm)
 
   /* Chroma */
   nvtxRangePush("MC Chroma");
+#pragma omp parallel for schedule(static) private(mb_x)
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
     for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)

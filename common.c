@@ -17,14 +17,13 @@ inline void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, in
   int16_t block_a[64] __attribute__((aligned(16)));
   int16_t block_b[64] __attribute__((aligned(16)));
 
-/* Perform the dequantization and iDCT */
-#pragma unroll
+  /* Perform the dequantization and iDCT */
   for (int x = 0; x < w; x += 16)
   {
     dequant_idct_block_8x8(in_data + (x * 8), block_a, dequant_scale);
     dequant_idct_block_8x8(in_data + ((x + 8) * 8), block_b, dequant_scale);
 
-#pragma unroll
+#pragma GCC unroll 8
     for (int i = 0; i < 8; ++i)
     {
       // Load two rows from two different mbs
@@ -44,7 +43,7 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
                      uint32_t height, uint8_t *out_data, float16_t *dequant_scale)
 {
   int y;
-  #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static)
   for (y = 0; y < height; y += 8)
   {
     dequantize_idct_row(in_data + y * width, prediction + y * width, width, height, y,
@@ -59,11 +58,10 @@ inline void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
   int16_t block_a[64] __attribute__((aligned(16)));
   int16_t block_b[64] __attribute__((aligned(16)));
 
-/* Perform the DCT and quantization */
-#pragma unroll
+  /* Perform the DCT and quantization */
   for (int x = 0; x < w; x += 16)
   {
-#pragma unroll
+#pragma GCC unroll 8
     for (int i = 0; i < 8; ++i)
     {
       uint8x16_t in_row = vld1q_u8(in_data + i * w + x);      // Reads 2 rows from two different MBs
@@ -89,7 +87,7 @@ inline void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
 void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
                   uint32_t height, int16_t *out_data, float16_t *quant_scale)
 {
-  #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static)
   for (int y = 0; y < height; y += 8)
   {
     dct_quantize_row(in_data + y * width, prediction + y * width, width,
