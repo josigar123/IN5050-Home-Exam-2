@@ -14,8 +14,9 @@
 #include "me.h"
 
 /* Motion estimation for 8x8 block */
-static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
-                         uint8_t *orig, uint8_t *ref, int color_component)
+static void
+me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
+             uint8_t *orig, uint8_t *ref, int color_component)
 {
   struct macroblock *mb =
       &cm->curframe->mbs[color_component][mb_y * cm->padw[color_component] / 8 + mb_x];
@@ -63,10 +64,14 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   // Write to stack, then heap at end
   int8_t best_mv_x = 0;
   int8_t best_mv_y = 0;
-  int best_sad = INT_MAX;
+  uint16_t best_sad = UINT16_MAX;
 
   uint8_t *orig_addr = orig + my * w + mx; // Unchanging, hoisted out of loop
   uint8x8_t orig_rows[8];
+
+  uint16x4_t v_best_sad = vdup_n_u16(UINT16_MAX);
+  int16x4_t v_best_mv_x = vdup_n_s16(0);
+  int16x4_t v_best_mv_y = vdup_n_s16(0);
 
   // Preload whole orig block into NEON registers
 #pragma GCC unroll 8
@@ -80,6 +85,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     uint8_t *ref_addr = ref + y * w;                    // Hoist
     __builtin_prefetch(ref + (y + 3) * w + left, 0, 1); // Hint at prefetch of ref block
     // Unroll inner loop by 4 to process more candidate blocks at once
+    // Gave some better performance
     for (x = left; x + 3 < right; x += 4)
     {
       uint16_t sad0 = sad_block_8x8(orig_rows, ref_addr + x, w);
@@ -87,6 +93,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
       uint16_t sad2 = sad_block_8x8(orig_rows, ref_addr + x + 2, w);
       uint16_t sad3 = sad_block_8x8(orig_rows, ref_addr + x + 3, w);
 
+      // Do comparisons for the computed sad values
       if (sad0 < best_sad)
       {
         best_sad = sad0;
@@ -112,6 +119,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
         best_mv_y = y - my;
       }
     }
+
     // Handle tail after clamping
     for (; x < right; ++x)
     {

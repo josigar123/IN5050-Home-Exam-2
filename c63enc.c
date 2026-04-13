@@ -313,7 +313,6 @@ static void print_help()
 int main(int argc, char **argv)
 {
   int c;
-  setbuf(stdout, NULL); // To not buffer I/O, so prints appear
 
   // ctx for threads
   pipeline_ctx_t ctx = {0};
